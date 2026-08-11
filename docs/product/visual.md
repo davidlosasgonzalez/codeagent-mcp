@@ -2,6 +2,8 @@
 
 PNG screenshots and pixel diffs for ChatGPT vision. Builds on the browser bridge ([`browser.md`](browser.md)).
 
+For how to actually use these while changing a UI — baseline first, hard reload, measure rather than eyeball — see [`frontend-workflow.md`](frontend-workflow.md).
+
 ## Tools
 
 | Tool | Role |

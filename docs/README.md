@@ -20,6 +20,7 @@ Reference documentation for operators self-hosting CodeAgent MCP. Start with the
 | [`product/terminals.md`](product/terminals.md) | tmux lifecycle |
 | [`product/browser.md`](product/browser.md) | Playwright loopback |
 | [`product/visual.md`](product/visual.md) | Screenshots + diff |
+| [`product/frontend-workflow.md`](product/frontend-workflow.md) | How to review visual changes you cannot see |
 | [`product/ops.md`](product/ops.md) | `ops_status` / `ops_cleanup`, quotas |
 | [`product/service-control.md`](product/service-control.md) | Restart your app's systemd unit from the chat (optional) |
 
