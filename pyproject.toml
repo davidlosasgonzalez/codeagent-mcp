@@ -1,0 +1,61 @@
+[project]
+name = "codeagent-mcp"
+version = "0.1.0"
+description = "Self-hosted MCP server that lets AI assistants work on code checkouts on your own machine"
+authors = [
+    { name = "David Losas González", email = "davidlosas93@gmail.com" }
+]
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp==3.4.5",
+    "pillow>=12.3.0",
+    "playwright>=1.62.0",
+    "pyyaml>=6.0.3",
+]
+readme = "README.md"
+keywords = ["mcp", "model-context-protocol", "coding-agent", "chatgpt", "self-hosted"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+]
+
+[project.urls]
+Homepage = "https://github.com/davidlosasgonzalez/codeagent-mcp"
+Repository = "https://github.com/davidlosasgonzalez/codeagent-mcp"
+Issues = "https://github.com/davidlosasgonzalez/codeagent-mcp/issues"
+
+[project.scripts]
+codeagent-mcp = "codeagent_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.9",
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.basedpyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"

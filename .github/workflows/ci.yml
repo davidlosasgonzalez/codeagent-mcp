@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install system tools (tmux, ripgrep)
+        run: sudo apt-get update && sudo apt-get install -y tmux ripgrep
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run basedpyright
+
+      - name: Install Playwright Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Tests
+        run: uv run pytest -q
+        env:
+          # The systemd unit pins TMPDIR in production; provide the same guarantee
+          # here so the exec/terminal tempdir pin never falls back to
+          # /var/lib/codeagent-mcp on the runner.
+          TMPDIR: ${{ runner.temp }}

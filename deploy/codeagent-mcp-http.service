@@ -1,0 +1,54 @@
+[Unit]
+Description=CodeAgent MCP Streamable HTTP (loopback only)
+Documentation=file:///opt/codeagent-mcp/docs/architecture/first-install.md
+Documentation=file:///opt/codeagent-mcp/docs/architecture/hardening.md
+Documentation=file:///opt/codeagent-mcp/docs/architecture/remote-mcp-transport.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=codeagent-mcp
+Group=codeagent-mcp
+WorkingDirectory=/opt/codeagent-mcp
+Environment=HOME=/var/lib/codeagent-mcp
+Environment=TMPDIR=/var/lib/codeagent-mcp/tmp
+Environment=TEMP=/var/lib/codeagent-mcp/tmp
+Environment=TMP=/var/lib/codeagent-mcp/tmp
+EnvironmentFile=/etc/codeagent-mcp/http.env
+ExecStart=/opt/codeagent-mcp/.venv/bin/codeagent-mcp --transport http --host 127.0.0.1 --port 8765 --mcp-path /mcp/
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+# Keep dedicated tmux server alive across MCP restarts.
+KillMode=process
+
+# Hardening subset measured on Linux. Do NOT enable RestrictSUIDSGID=true
+# (seccomp returns ENOSYS for openat2 → all fs_* fail with errno=38).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+UMask=0077
+
+# Adjust paths/UID for your host. XDG_RUNTIME_DIR=/run/user/<uid of codeagent-mcp>.
+# Include every project root the agent may write (or omit write roots and keep RO).
+# Example: ReadWritePaths=/var/lib/codeagent-mcp /run/user/UID /srv/example-app
+ReadWritePaths=/var/lib/codeagent-mcp /run/user/REPLACE_WITH_CODEAGENT_UID
+# Secrets under a writable tree must stay unreadable:
+# InaccessiblePaths=/srv/example-app/.env
+ReadOnlyPaths=/opt/codeagent-mcp /opt/uv-python
+
+MemoryMax=2G
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

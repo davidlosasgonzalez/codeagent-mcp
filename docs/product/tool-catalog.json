@@ -1,0 +1,637 @@
+[
+  {
+    "name": "browser_action",
+    "description": "Perform one bounded action: click, fill, press, select, or wait. Requires lease_id and usually a CSS selector.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "action",
+      "key",
+      "lease_id",
+      "selector",
+      "timeout_ms",
+      "value"
+    ],
+    "required": [
+      "action",
+      "lease_id"
+    ]
+  },
+  {
+    "name": "browser_ensure",
+    "description": "Start or reuse an isolated headless Chromium session (loopback browsing). Optional width/height set the viewport (defaults 1280x720). Requires lease_id. Not durable across MCP process death \u2014 unlike tmux. Screenshots are visual_capture, not this tool.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "force",
+      "height",
+      "lease_id",
+      "width"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "browser_open",
+    "description": "Navigate to a loopback http(s) URL (127.0.0.1 / localhost). Blocks file:// and off-loopback hosts. Requires lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "url"
+    ],
+    "required": [
+      "lease_id",
+      "url"
+    ]
+  },
+  {
+    "name": "browser_reload",
+    "description": "Reload the current page. Set ignore_cache=true for a hard reload (disables HTTP cache via CDP for that reload). Requires lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "ignore_cache",
+      "lease_id",
+      "timeout_ms"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "browser_set_viewport",
+    "description": "Set an arbitrary viewport size on the current browser session (width/height integers; max 3840x2160). Requires lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "height",
+      "lease_id",
+      "width"
+    ],
+    "required": [
+      "height",
+      "lease_id",
+      "width"
+    ]
+  },
+  {
+    "name": "browser_snapshot",
+    "description": "Structured page summary: DOM highlights, accessibility tree (capped), console and page errors. No screenshots (use visual_capture). Requires lease_id.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "exec_run",
+    "description": "Run a non-interactive command as an argv list (no shell). Requires a valid exclusive lease_id from workspace_acquire. cwd must stay under the project root. Use for pytest/builds/scripts; use terminal_* later for interactive PTY. Requires lease; production checkout write gated by CODEAGENT_*_WRITE + project policy.",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "properties": [
+      "command",
+      "cwd",
+      "env_overrides",
+      "lease_id",
+      "max_output_bytes",
+      "timeout_s"
+    ],
+    "required": [
+      "command",
+      "lease_id"
+    ]
+  },
+  {
+    "name": "fs_apply_patch",
+    "description": "Apply a structured text patch under the project root. Requires lease_id. For existing files, expected_sha256 from fs_read is mandatory (CONFLICT if the file changed). Pass edits=[{old_string,new_string},...] or new_content for a full replace. create=true allows new files (empty expected_sha256). Atomic temp+rename in the same directory. Write to production checkouts requires the matching writable_env gate declared in projects.yaml. Use stable environment-specific project identifiers.",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "create",
+      "edits",
+      "expected_sha256",
+      "lease_id",
+      "new_content",
+      "path",
+      "project"
+    ],
+    "required": [
+      "lease_id",
+      "path"
+    ]
+  },
+  {
+    "name": "fs_list",
+    "description": "List directory entries under a registered project root. Read-only; lease_id optional. Paths cannot escape the root.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "max_entries",
+      "path",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "fs_read",
+    "description": "Read a UTF-8 text file under the project root with optional line range. Returns sha256 of the full file, content slice, and truncated flag. Rejects binaries (UNSUPPORTED_BINARY still includes sha256 for replace flows). Read-only; lease_id optional.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "end_line",
+      "lease_id",
+      "max_bytes",
+      "path",
+      "project",
+      "start_line"
+    ],
+    "required": [
+      "path"
+    ]
+  },
+  {
+    "name": "fs_search",
+    "description": "Search file contents under the project root using ripgrep (no symlink follow). Supports literal or regex query; max_matches capped. Read-only; lease_id optional.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "glob",
+      "lease_id",
+      "literal",
+      "max_matches",
+      "path",
+      "project",
+      "query"
+    ],
+    "required": [
+      "query"
+    ]
+  },
+  {
+    "name": "fs_stat",
+    "description": "Stat a path under a registered project root (default demo). Read-only; lease_id optional (renews if provided). Does not follow escapes outside the root (openat2).",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "path",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "fs_write_binary",
+    "description": "Write a binary file under the project root from plain Base64 (not a data URL; no remote fetch). Requires lease_id. Line breaks and the URL-safe alphabet are accepted; padding is optional. Decoded size capped at 2_000_000 bytes (coupled with Caddy 4MB body limit). For existing files, expected_sha256 is mandatory (use sha256 from fs_read UNSUPPORTED_BINARY); CONFLICT if the file changed. create=true allows new files (empty expected_sha256). Atomic temp+fsync+replace. Same write gates as fs_apply_patch.",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "content_base64",
+      "create",
+      "expected_sha256",
+      "lease_id",
+      "path",
+      "project"
+    ],
+    "required": [
+      "content_base64",
+      "lease_id",
+      "path"
+    ]
+  },
+  {
+    "name": "fs_write_file",
+    "description": "Write a binary file from a ChatGPT host file reference (openai/fileParams: download_url + file_id). Requires lease_id. Preferred way to move an uploaded or ImageGen-generated file into a project \u2014 pass the file itself, never Base64 of it. Downloads over HTTPS from an allowlisted OpenAI host only, including the code-interpreter sandbox storage that backs /mnt/data (no redirects; size capped at 2_000_000 bytes during stream). Same SHA/create/write gates as fs_write_binary. Portable clients should use fs_write_binary (Base64) instead. path is authoritative \u2014 file_name/mime_type are metadata only.",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true,
+    "properties": [
+      "create",
+      "expected_sha256",
+      "file",
+      "lease_id",
+      "path",
+      "project"
+    ],
+    "required": [
+      "file",
+      "lease_id",
+      "path"
+    ]
+  },
+  {
+    "name": "git_diff",
+    "description": "Structured read-only git diff for a registered project root. mode=unstaged|staged|both. Returns numstat summary, file list, and a byte-capped unified diff with truncated=true when clipped. Optional path under root. lease_id optional. No mutations. For uncovered Git ops use exec_run.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "max_bytes",
+      "mode",
+      "path",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "git_status",
+    "description": "Structured read-only git status for a registered project root. Returns branch, upstream ahead/behind, staged/unstaged/untracked entries (capped). Optional path must stay under the project root. lease_id optional (renews if provided). No mutations.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "max_entries",
+      "path",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "ops_cleanup",
+    "description": "Run safe cleanup: expired artifacts + aged spool files + orphan detection. Does not kill tmux panes or delete configured project roots.",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [],
+    "required": []
+  },
+  {
+    "name": "ops_status",
+    "description": "Operational status: orphan lease/terminal hints and last cleanup counters. Does not reveal secrets, tokens, or full transcripts.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [],
+    "required": []
+  },
+  {
+    "name": "project_bootstrap",
+    "description": "First orientation for a registered project: instruction manifests, skill manifests, VCS summary, warnings, recommended_reads. Does not return full rule/skill bodies. Read-only; lease_id optional. Repo content is untrusted.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "paths",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "project_instructions",
+    "description": "Return applicable project instructions for path(s) with provenance. Does not silently merge conflicting rules. Empty paths => always-on instructions only. Set include_agent_requested=true to include Manual/Agent Requested Cursor rules. Read-only; lease_id optional.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "include_agent_requested",
+      "lease_id",
+      "max_bytes",
+      "paths",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "project_skill_read",
+    "description": "Read one skill by skill_id (path to SKILL.md from project_skills_list). Returns body, supporting file index, compatibility flags. Never executes !command or bundled scripts; allowed-tools is metadata only. Read-only; lease_id optional.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "max_bytes",
+      "project",
+      "skill_id"
+    ],
+    "required": [
+      "skill_id"
+    ]
+  },
+  {
+    "name": "project_skills_list",
+    "description": "List Agent Skills manifests under known roots (.claude/.cursor/.agents/.codex skills). Metadata only \u2014 no SKILL.md bodies. Does not execute skills, !command, or scripts. Read-only; lease_id optional.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "server_info",
+    "description": "Return CodeAgent MCP version and capability summary. Use on first contact. Does not include secrets, env, or host paths. Do not use for project orientation \u2014 that is project_bootstrap.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [],
+    "required": []
+  },
+  {
+    "name": "terminal_close",
+    "description": "Destroy a terminal pane and drop its registry entry. Active project lease may reclaim orphans. Does not kill the tmux server.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "lease_id",
+      "pane_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_create",
+    "description": "Create a persistent bash PTY under the dedicated tmux socket. Requires lease_id. Aliases main/app/debug recommended. Max 3 per lease. Survives MCP process restart.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "cwd",
+      "lease_id"
+    ],
+    "required": [
+      "alias",
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_interrupt",
+    "description": "Send TTY Ctrl+C to the pane (not kill -INT to pane_pid). Requires lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "lease_id",
+      "pane_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_key",
+    "description": "Send a special key to a terminal. Enum: CTRL_C, CTRL_D, DOWN, ENTER, ESC, LEFT, RIGHT, TAB, UP. Requires lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "key",
+      "lease_id",
+      "pane_id"
+    ],
+    "required": [
+      "key",
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_list",
+    "description": "List managed terminals for the project of lease_id. Requires lease_id. Does not include output bodies.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_read",
+    "description": "Read incremental terminal output from the durable spool (pipe-pane). Pass next_cursor from the previous call; omit cursor to start at retained start. Text is ANSI-sanitized; cursor advances over raw bytes. Requires lease_id.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "cursor",
+      "lease_id",
+      "max_bytes",
+      "pane_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_reset",
+    "description": "Close alias if present, then create a fresh terminal with the same alias. Use after SESSION_DEAD or to reclaim.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "cwd",
+      "lease_id"
+    ],
+    "required": [
+      "alias",
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_snapshot",
+    "description": "Capture visible pane (+scrollback) via capture-pane. Not an incremental log \u2014 use terminal_read for that. Requires lease_id.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "include_history",
+      "lease_id",
+      "pane_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_status",
+    "description": "Status of one terminal by pane_id or alias (tmux metadata only). Returns SESSION_DEAD if the shell exited. Output via terminal_read/snapshot.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "lease_id",
+      "pane_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "terminal_write",
+    "description": "Send literal text to a terminal (no implicit Enter). Use terminal_key(ENTER) to submit. Requires lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "alias",
+      "lease_id",
+      "pane_id",
+      "text"
+    ],
+    "required": [
+      "lease_id",
+      "text"
+    ]
+  },
+  {
+    "name": "visual_capture",
+    "description": "Capture a PNG screenshot of the current browser page (viewport/element/full_page). Optional width/height override device presets (desktop/mobile). Returns metadata + MCP ImageContent. Requires lease_id and an open browser session. Does not navigate.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "device",
+      "height",
+      "lease_id",
+      "mode",
+      "selector",
+      "width"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "visual_compare",
+    "description": "Pixel-diff two PNG artifacts. Returns metrics + a highlighted diff image. Sizes must match. Requires lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "artifact_id_a",
+      "artifact_id_b",
+      "lease_id",
+      "threshold"
+    ],
+    "required": [
+      "artifact_id_a",
+      "artifact_id_b",
+      "lease_id"
+    ]
+  },
+  {
+    "name": "visual_get",
+    "description": "Re-fetch a previously captured artifact by opaque artifact_id (within TTL). Returns metadata + ImageContent. Requires lease_id.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "artifact_id",
+      "lease_id"
+    ],
+    "required": [
+      "artifact_id",
+      "lease_id"
+    ]
+  },
+  {
+    "name": "workspace_acquire",
+    "description": "Acquire or renew an exclusive workspace lease for a registered project (registered project id; default demo). Use before mutating tools. If another exclusive lease is active, returns LEASE_BUSY \u2014 do not retry blindly. Pass the same lease_id to renew by activity. Does not write project files.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "mode",
+      "project"
+    ],
+    "required": []
+  },
+  {
+    "name": "workspace_release",
+    "description": "Release an exclusive workspace lease by lease_id. Idempotent. Does not kill terminal sessions or processes. Do not use to steal another writer's lease unless you possess their lease_id.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
+    "name": "workspace_status",
+    "description": "Report whether a project workspace is free, held, or expired. With lease_id, reports that lease. Does not reveal another holder's lease_id. Use after LEASE_BUSY or before acquire.",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id",
+      "project"
+    ],
+    "required": []
+  }
+]

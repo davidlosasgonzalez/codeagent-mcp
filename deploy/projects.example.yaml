@@ -1,0 +1,37 @@
+# Copy to /etc/codeagent-mcp/projects.yaml (mode 0640 root:codeagent-mcp)
+# and set CODEAGENT_PROJECTS_FILE=/etc/codeagent-mcp/projects.yaml in http.env.
+#
+# Clients NEVER supply filesystem roots — only these server-side ids are valid.
+# Full guide: docs/product/projects-registry.md
+#
+# Fields:
+#   id            — stable project id for workspace_acquire / tools
+#   root          — absolute path on this host
+#   writable      — true|false (static write gate; default false)
+#   writable_env  — if set, writable only when that env var equals "1"
+#   env           — optional map of environment variables exported to exec_run
+#                   in this project. Server-side only; clients cannot set it.
+#                   Process, loader and credential variables are refused.
+#   control_socket— optional path to a privileged helper socket; enables the
+#                   service_status/restart/start tools for this project.
+#                   See docs/product/service-control.md
+#   health_url    — optional loopback http(s) URL probed after a restart
+
+projects:
+  # Smoke / scratch (safe default for first install)
+  - id: demo
+    root: /var/lib/codeagent-mcp/demo-root
+    writable: true
+
+  # Example production app (uncomment and edit):
+  # - id: myapp-prod
+  #   root: /srv/myapp
+  #   writable_env: CODEAGENT_MYAPP_WRITE
+  #   env:
+  #     MYAPP_DATA_ROOT: /var/lib/myapp/data
+  #   control_socket: /run/myapp-ctl.sock
+  #   health_url: http://127.0.0.1:9000/health
+  #
+  # Then in http.env:
+  #   CODEAGENT_MYAPP_WRITE=0    # flip to 1 when you intentionally enable writes
+  # And in systemd ReadWritePaths= add /srv/myapp when write is on.
