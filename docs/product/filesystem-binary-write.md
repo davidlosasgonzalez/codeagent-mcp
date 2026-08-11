@@ -15,6 +15,29 @@ For a ChatGPT attachment or an ImageGen result, prefer `fs_write_file`: the byte
 host-to-host and never pass through the prompt, so nothing can be truncated or re-encoded on the
 way. Reach for `fs_write_binary` only when the client cannot fill `fileParams`.
 
+### Why 2 MB
+
+The cap is not arbitrary, and it is not the server's own preference: it is derived from the
+reverse proxy in front of it, which ships with `request_body max_size 4MB`.
+
+Base64 costs a third. Encoding 2_000_000 bytes produces ~2.67 MB on the wire, leaving roughly
+33% of the proxy's budget for the JSON-RPC envelope and headers. Set the cap at 3 MB and an
+encoded payload would graze 4 MB, so large writes would start bouncing at the proxy before the
+server ever saw them — as a connection error, not a useful message.
+
+One detail that catches people out: Caddy's `4MB` is **decimal** (go-humanize), i.e. 4_000_000
+bytes, not 4 MiB. Assume binary and you are 194_304 bytes off, exactly at the boundary where it
+matters.
+
+`fs_write_file` keeps the same number even though its bytes are fetched server-side and never
+cross the proxy inbound. That is deliberate: one limit to reason about instead of two, and it
+bounds how much a single call can hold in memory. It is also the same as `HARD_MAX_READ_BYTES`,
+so what can be written can be read back.
+
+To raise it, move **all** of it together — proxy limit, `MAX_BINARY_WRITE_BYTES`, and a rerun of
+the threat tests. Raising the proxy alone just moves the failure; raising the code alone
+guarantees it. See [`../architecture/hardening.md`](../architecture/hardening.md).
+
 ### The traffic is one-way
 
 Inbound and outbound are **not** symmetric, and it is worth knowing before you plan around it:
@@ -28,6 +51,12 @@ Inbound and outbound are **not** symmetric, and it is worth knowing before you p
 so you can still drive a replace flow. Nothing hands an arbitrary binary in the checkout back to
 the client: a PDF, a font or an archive that lives on the server stays there. That tool does not
 exist, and the surface is only extended in response to observed friction.
+
+The narrowness is the point. The one binary format that does travel outward is a PNG, and it
+exists so the model can **look** at something and tell you whether the layout holds and the CSS
+does what you meant — see [`frontend-workflow.md`](frontend-workflow.md). Those pixels are a
+render produced for judgement, not a copy of a file. Inbound is a delivery channel; outbound is
+a viewport.
 
 If you genuinely need a small binary out, the escape hatch is `exec_run` with `base64`, bounded
 by the 200 KB stdout cap (~150 KB of file) and paid for in prompt tokens. Treat it as a
