@@ -15,6 +15,24 @@ For a ChatGPT attachment or an ImageGen result, prefer `fs_write_file`: the byte
 host-to-host and never pass through the prompt, so nothing can be truncated or re-encoded on the
 way. Reach for `fs_write_binary` only when the client cannot fill `fileParams`.
 
+### The traffic is one-way
+
+Inbound and outbound are **not** symmetric, and it is worth knowing before you plan around it:
+
+| Direction | What can move |
+|-----------|---------------|
+| Client → project root | Any file, any type, up to 2 MB (`fs_write_file` / `fs_write_binary`) |
+| Project root → client | UTF-8 text (`fs_read`) and screenshots of a rendered page (`visual_capture`) |
+
+`fs_read` refuses binaries by design — it answers `UNSUPPORTED_BINARY` with the file's `sha256`
+so you can still drive a replace flow. Nothing hands an arbitrary binary in the checkout back to
+the client: a PDF, a font or an archive that lives on the server stays there. That tool does not
+exist, and the surface is only extended in response to observed friction.
+
+If you genuinely need a small binary out, the escape hatch is `exec_run` with `base64`, bounded
+by the 200 KB stdout cap (~150 KB of file) and paid for in prompt tokens. Treat it as a
+workaround, not a feature.
+
 | Tool | Client path | Core |
 |------|-------------|------|
 | `fs_write_binary` | Plain Base64 argument | `write_bytes` |

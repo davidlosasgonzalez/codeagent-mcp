@@ -56,7 +56,8 @@ Two of those are easy to overlook:
 - **`fs_write_file` moves files off the chat and into the repo.** Attach anything to the
   conversation — a mockup, a PDF spec, a CSV fixture, a font — or have the assistant generate an
   image, and it lands in your checkout. Any type, up to 2 MB, travelling host-to-host rather than
-  through the prompt, so nothing is truncated or re-encoded. See
+  through the prompt, so nothing is truncated or re-encoded. The traffic is one-way: what comes
+  back out is text and screenshots, not arbitrary files. See
   [`filesystem-binary-write.md`](docs/product/filesystem-binary-write.md).
 - **`visual_capture` + `visual_compare` close the loop on work you cannot see.** Screenshot before
   and after a change and diff the pixels. See
