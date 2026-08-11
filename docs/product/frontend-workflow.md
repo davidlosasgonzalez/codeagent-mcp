@@ -82,6 +82,12 @@ the client's vision model reads it, and "match this" beats three paragraphs of
 description. If you do not, ask for a proposal and approve it before any CSS is
 written; correcting a described layout is cheaper than correcting a built one.
 
+Better still, put the reference **in the repo** with `fs_write_file` rather than
+leaving it in the conversation. It survives the chat, the next session can look
+at it, and it works for anything up to 2 MB — the mockup, but also the PDF spec,
+the brand font or the logo the page needs. See
+[`filesystem-binary-write.md`](filesystem-binary-write.md).
+
 Either way, name the viewports you care about up front. `browser_set_viewport`
 takes arbitrary sizes, and a layout that works at 1280 tells you nothing about
 390.

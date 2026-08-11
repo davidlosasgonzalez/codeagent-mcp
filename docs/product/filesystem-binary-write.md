@@ -4,7 +4,16 @@ Tools: `fs_write_binary` (portable Base64) · `fs_write_file` (ChatGPT `openai/f
 
 ## Purpose
 
-Introduce externally generated binary assets (PNG/JPEG/WebP, etc.) into a project root over MCP.
+Move a file that exists on the **client** side into a project root on the server.
+
+There is no allowlist of types or extensions: any file up to **2 MB** is accepted — a design
+mockup, a PDF spec, a CSV fixture, a font, a logo, a certificate. What is constrained is where
+the bytes may come from (`fs_write_file` fetches only from allowlisted hosts) and where they may
+land (lease, PathJail, write gate), never what they contain.
+
+For a ChatGPT attachment or an ImageGen result, prefer `fs_write_file`: the bytes travel
+host-to-host and never pass through the prompt, so nothing can be truncated or re-encoded on the
+way. Reach for `fs_write_binary` only when the client cannot fill `fileParams`.
 
 | Tool | Client path | Core |
 |------|-------------|------|
