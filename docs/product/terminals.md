@@ -42,6 +42,22 @@ Persistent PTYs for interactive work. Deterministic non-interactive work stays o
 - Max 3 live terminals per lease
 - **No silent takeover** of another lease's shell (by design)
 
+## Temp files in a pane
+
+`terminal_create` returns `tmpdir`, and the pane shell starts with `TMPDIR`, `TEMP` and
+`TMP` already set to it. A hardened unit leaves the service no usable `/tmp`, so a tool
+that defaults there fails on a path that looks perfectly ordinary — write scratch files
+under `tmpdir`.
+
+Two mechanisms, deliberately: the value is pushed into the tmux server's global
+environment (`set-environment -g NAME VALUE` — name and value are **separate**
+arguments; passing `NAME=value` is rejected and used to fail silently), and each pane
+also receives it directly via `new-window -e KEY=VALUE`, so a pane is correct even when
+the server's global environment is stale.
+
+A pane created **before** this landed does not have it. A running shell's environment
+cannot be changed from outside; recreate the terminal (`terminal_reset`).
+
 ## Known limitation
 
 Orphan panes from expired leases still count against the max-3 budget; reclaiming them is explicit today (`terminal_reset` / `terminal_close`). Automatic cleanup of expired-lease terminals is a possible future improvement.

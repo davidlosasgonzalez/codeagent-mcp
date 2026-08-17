@@ -61,7 +61,9 @@ hardened unit gives the service no usable `/tmp`, so a tool that defaults there 
 a path that looks perfectly ordinary. Write scratch files under `tmpdir`.
 
 Clients cannot override it — `TMPDIR` is on the `exec_run` env denylist and is re-pinned
-after project env is applied.
+after project env is applied. For panes specifically, see
+[`terminals.md`](terminals.md): a shell created before this shipped still lacks the
+variable and has to be recreated.
 
 ## Errors
 
