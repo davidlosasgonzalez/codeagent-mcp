@@ -202,17 +202,18 @@ def diff_since(
         blob = blob.encode("utf-8")[:max_bytes].decode("utf-8", errors="ignore")
         truncated = True
 
+    baseline_head = str((baseline or {}).get("head") or "")
     return tool_ok(
         project=project,
         root=root,
         path=pathspec or "",
         baseline={
             "tree": tree,
-            "head": (baseline or {}).get("head", ""),
+            "head": baseline_head,
             "taken_at": (baseline or {}).get("taken_at", ""),
         },
         current={"tree": current["tree"], "head": current["head"]},
-        head_moved=bool((baseline or {}).get("head")) and (baseline or {})["head"] != current["head"],
+        head_moved=bool(baseline_head) and baseline_head != current["head"],
         summary={
             "files": len(files),
             "insertions": total_ins,

@@ -8,11 +8,11 @@ Reference documentation for operators self-hosting CodeAgent MCP. Start with the
 |------|---------|
 | [`product/clients.md`](product/clients.md) | Which MCP clients work, and how they connect |
 | [`product/connect-chatgpt.md`](product/connect-chatgpt.md) | Step-by-step ChatGPT connector setup |
-| [`product/tool-surface.md`](product/tool-surface.md) | Deployed MCP tools (39 Core) |
+| [`product/tool-surface.md`](product/tool-surface.md) | Deployed MCP tools (42 Core) |
 | [`product/tool-catalog.json`](product/tool-catalog.json) | Machine-readable `tools/list` snapshot |
 | [`product/projects-registry.md`](product/projects-registry.md) | What roots the agent may touch (`projects.yaml`) |
 | [`product/workspace-lease.md`](product/workspace-lease.md) | Exclusive leases |
-| [`product/project-intelligence.md`](product/project-intelligence.md) | Instructions/skills discovery |
+| [`product/project-intelligence.md`](product/project-intelligence.md) | Instructions/skills/agents discovery |
 | [`product/filesystem-readonly.md`](product/filesystem-readonly.md) | `fs_*` read path |
 | [`product/filesystem-apply-patch.md`](product/filesystem-apply-patch.md) | `fs_apply_patch` |
 | [`product/filesystem-binary-write.md`](product/filesystem-binary-write.md) | `fs_write_binary` + `fs_write_file` |
@@ -23,6 +23,7 @@ Reference documentation for operators self-hosting CodeAgent MCP. Start with the
 | [`product/frontend-workflow.md`](product/frontend-workflow.md) | How to review visual changes you cannot see |
 | [`product/ops.md`](product/ops.md) | `ops_status` / `ops_cleanup`, quotas |
 | [`product/service-control.md`](product/service-control.md) | Restart your app's systemd unit from the chat (optional) |
+| [`product/runtime-inspection.md`](product/runtime-inspection.md) | Read the data your deployed service actually runs on (optional) |
 
 ## Architecture
 

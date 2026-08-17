@@ -39,7 +39,7 @@ Details and plan requirements: [`docs/product/clients.md`](docs/product/clients.
 
 ## What it can do
 
-39 tools, grouped by what they touch:
+42 tools, grouped by what they touch:
 
 - **Workspace:** `workspace_acquire` · `workspace_status` · `workspace_release`
 - **Filesystem:** `fs_stat` · `fs_list` · `fs_read` · `fs_search` · `fs_apply_patch` · `fs_write_binary` · `fs_write_file`

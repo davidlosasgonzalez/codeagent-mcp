@@ -50,6 +50,8 @@ projects:
     writable_env: CODEAGENT_MYAPP_WRITE
     control_socket: /run/myapp-ctl.sock        # lets the agent restart the unit
     health_url: http://127.0.0.1:9000/health   # checked after a restart
+    runtime_paths:                             # read-only views of live data
+      data: /var/lib/myapp
 ```
 
 | Field | Required | Meaning |
@@ -61,6 +63,7 @@ projects:
 | `env` | no | Environment variables exported to `exec_run` in this project. |
 | `control_socket` | no | Absolute path to a privileged helper socket. Enables the service control tools for this project — see [`service-control.md`](service-control.md). |
 | `health_url` | no | Loopback `http`/`https` URL probed after a restart. Refused otherwise. |
+| `runtime_paths` | no | Map of name to absolute directory, exposed **read-only** via `runtime_list`/`runtime_read`. Reserved system locations are refused, and the service account still needs POSIX permission — see [`runtime-inspection.md`](runtime-inspection.md). |
 
 ### Per-project environment
 

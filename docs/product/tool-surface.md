@@ -1,8 +1,10 @@
 # Tool surface — CodeAgent MCP
 
-A default install exposes **39 tools**. Source of truth for the names exposed to clients is `list_tools`; the machine-readable snapshot is [`tool-catalog.json`](tool-catalog.json), and `scripts/regression.sh` verifies the live server matches it.
+A default install exposes **42 tools**. Source of truth for the names exposed to clients is `list_tools`; the machine-readable snapshot is [`tool-catalog.json`](tool-catalog.json), and `scripts/regression.sh` verifies the live server matches it.
 
 Three more — `service_status`, `service_restart` and `service_start` — appear only when a project in the registry declares a `control_socket`. See [`service-control.md`](service-control.md).
+
+Two more — `runtime_list` and `runtime_read` — appear only when a project declares `runtime_paths`. See [`runtime-inspection.md`](runtime-inspection.md).
 
 The surface is deliberately frozen: new tools are added only in response to observed friction, because published ChatGPT apps may require recreate/republish after catalog changes.
 
@@ -15,6 +17,7 @@ ChatGPT reaches these tools via **remote MCP over HTTPS/OAuth/FastMCP** (placeho
 | `workspace_acquire` | Exclusive lease on a configured project root |
 | `workspace_status` | Lease state / reclaim |
 | `workspace_release` | Release lease (does not kill panes unless asked) |
+| `workspace_diff_since_acquire` | Changes made **since this lease was acquired**, excluding dirt that was already in the checkout |
 
 Projects: configured in `projects.yaml` (example: production roots under `/srv/…` writable under lease + `writable_env` gates; `demo` for smoke). Use stable environment-specific project identifiers.
 
@@ -38,6 +41,8 @@ Projects: configured in `projects.yaml` (example: production roots under `/srv/�
 | `project_instructions` | Scoped AGENTS/CLAUDE/rules |
 | `project_skills_list` | Skill manifests only |
 | `project_skill_read` | One skill body (no `!command` exec) |
+| `project_agents_list` | Subagent definition manifests |
+| `project_agent_read` | One subagent contract, to adopt yourself (spawns nothing) |
 
 There is deliberately no `project_skill_run` tool.
 

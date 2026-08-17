@@ -16,6 +16,11 @@
 #                   service_status/restart/start tools for this project.
 #                   See docs/product/service-control.md
 #   health_url    — optional loopback http(s) URL probed after a restart
+#   runtime_paths — optional map of name -> absolute directory, exposed READ-ONLY
+#                   via runtime_list/runtime_read so a caller can check what the
+#                   deployed service actually holds. Declaring a path authorizes
+#                   it; the service account still needs POSIX permission to read
+#                   it. See docs/product/runtime-inspection.md
 
 projects:
   # Smoke / scratch (safe default for first install)
@@ -31,6 +36,8 @@ projects:
   #     MYAPP_DATA_ROOT: /var/lib/myapp/data
   #   control_socket: /run/myapp-ctl.sock
   #   health_url: http://127.0.0.1:9000/health
+  #   runtime_paths:
+  #     data: /var/lib/myapp
   #
   # Then in http.env:
   #   CODEAGENT_MYAPP_WRITE=0    # flip to 1 when you intentionally enable writes
