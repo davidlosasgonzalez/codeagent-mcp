@@ -69,7 +69,9 @@ def register_terminal_tools(server: FastMCP) -> None:
         description=(
             "Create a persistent bash PTY under the dedicated tmux socket. "
             "Requires lease_id. Aliases main/app/debug recommended. Max 3 per lease. "
-            "Survives MCP process restart."
+            "Survives MCP process restart. Returns tmpdir: the writable temp root "
+            "already exported as TMPDIR in the pane — write scratch files there, "
+            "not in /tmp."
         ),
         annotations=MUT,
     )

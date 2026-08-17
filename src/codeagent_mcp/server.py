@@ -16,6 +16,7 @@ from codeagent_mcp.tools.fs import register_fs_tools
 from codeagent_mcp.tools.git_tools import register_git_tools
 from codeagent_mcp.tools.ops import register_ops_tools
 from codeagent_mcp.tools.project import register_project_tools
+from codeagent_mcp.tools.runtime import register_runtime_tools
 from codeagent_mcp.tools.server_info import build_server_info
 from codeagent_mcp.tools.service_control import register_service_control_tools
 from codeagent_mcp.tools.terminal import register_terminal_tools
@@ -64,6 +65,7 @@ def create_server(
     register_visual_tools(server)
     register_ops_tools(server)
     register_service_control_tools(server)
+    register_runtime_tools(server)
 
     @server.tool(
         name="server_info",

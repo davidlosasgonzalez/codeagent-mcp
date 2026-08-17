@@ -114,14 +114,29 @@ def _key_allowed(key: str) -> bool:
     return any(key.startswith(p) for p in _ALLOWED_PREFIXES + _extra_allowed_prefixes())
 
 
+def service_tmpdir(env: dict[str, str] | None = None) -> Path:
+    """Return the private temp root pinned into every child process.
+
+    Pure: it resolves the path without creating it, so callers that only need to
+    *report* the directory to a client cannot fail on a read-only or unprivileged
+    host. Use :func:`ensure_service_tmpdir` when the directory must exist.
+    """
+    source = os.environ if env is None else env
+    raw = source.get("TMPDIR") or str(CODEAGENT_DEFAULT_TMPDIR)
+    root = Path(raw)
+    return root if root.is_absolute() else CODEAGENT_DEFAULT_TMPDIR
+
+
+def ensure_service_tmpdir(env: dict[str, str] | None = None) -> Path:
+    """Resolve the private temp root and create it (mode 0700) if absent."""
+    root = service_tmpdir(env)
+    root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    return root
+
+
 def _ensure_private_tmpdir(env: dict[str, str]) -> None:
     """Pin tempfile roots to the service private dir (not overridable via exec_run)."""
-    raw = env.get("TMPDIR") or str(CODEAGENT_DEFAULT_TMPDIR)
-    root = Path(raw)
-    if not root.is_absolute():
-        root = CODEAGENT_DEFAULT_TMPDIR
-    root.mkdir(parents=True, mode=0o700, exist_ok=True)
-    pinned = str(root)
+    pinned = str(ensure_service_tmpdir(env))
     env["TMPDIR"] = pinned
     env["TEMP"] = pinned
     env["TMP"] = pinned

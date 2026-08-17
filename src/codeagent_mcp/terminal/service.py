@@ -291,7 +291,16 @@ class TerminalService:
             }
             terminals[pane.pane_id] = rec
             data = {**data, "terminals": terminals}
-            return tool_ok(**self._public_rec(pane.pane_id, rec)), data
+            # Report the provisioned temp root: a pane shell inherits it, but a
+            # caller that does not know its path falls back to /tmp, which a
+            # hardened unit gives it no access to.
+            return (
+                tool_ok(
+                    **self._public_rec(pane.pane_id, rec),
+                    tmpdir=str(tmux.codeagent_tmpdir()),
+                ),
+                data,
+            )
 
         try:
             return self.store.read_modify_write(mutator)

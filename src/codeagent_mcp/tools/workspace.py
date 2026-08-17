@@ -6,6 +6,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from codeagent_mcp.git.baseline import diff_since
+from codeagent_mcp.git.service import DEFAULT_MAX_DIFF_BYTES
 from codeagent_mcp.tools.annotations import MUT, RO
 from codeagent_mcp.workspace.leases import LeaseManager
 
@@ -49,7 +51,10 @@ def register_workspace_tools(server: FastMCP) -> None:
             "Acquire or renew an exclusive workspace lease for a registered project "
             "(registered project id; default demo). Use before mutating tools. "
             "If another exclusive lease is active, returns LEASE_BUSY — do not retry blindly. "
-            "Pass the same lease_id to renew by activity. Does not write project files."
+            "Pass the same lease_id to renew by activity. Does not write project files. "
+            "A fresh acquire also returns tmpdir (the writable temp root for this server) "
+            "and baseline (the worktree snapshot that workspace_diff_since_acquire uses "
+            "to separate your edits from pre-existing dirt)."
         ),
         annotations=MUT,
     )
@@ -95,3 +100,30 @@ def register_workspace_tools(server: FastMCP) -> None:
     )
     def workspace_release(lease_id: str) -> dict[str, Any]:
         return get_lease_manager().release(lease_id=lease_id)
+
+    @server.tool(
+        name="workspace_diff_since_acquire",
+        description=(
+            "Diff the project worktree against the snapshot taken when this lease was "
+            "acquired — your own changes only, with pre-existing staged/unstaged/untracked "
+            "work excluded. Use this, not git_diff, to review what you did in a checkout "
+            "that was already dirty when you arrived. Staging state and commits made during "
+            "the lease do not affect the result. Requires lease_id. Read-only."
+        ),
+        annotations=RO,
+    )
+    def workspace_diff_since_acquire(
+        lease_id: str,
+        path: str = "",
+        max_bytes: int = DEFAULT_MAX_DIFF_BYTES,
+    ) -> dict[str, Any]:
+        lease = get_lease_manager().require_active(lease_id=lease_id)
+        if lease.get("ok") is not True:
+            return lease
+        return diff_since(
+            project=str(lease["project"]),
+            root=str(lease["root"]),
+            baseline=lease.get("baseline"),
+            path=path,
+            max_bytes=max_bytes,
+        )

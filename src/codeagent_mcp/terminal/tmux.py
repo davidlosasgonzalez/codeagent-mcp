@@ -8,12 +8,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from codeagent_mcp.exec.env import child_umask
+from codeagent_mcp.exec.env import child_umask, ensure_service_tmpdir
 
 DEFAULT_SOCKET = "/var/lib/codeagent-mcp/tmux/default.sock"
 DEFAULT_CONF = "/var/lib/codeagent-mcp/tmux/tmux.conf"
 DEFAULT_TMPDIR = "/var/lib/codeagent-mcp/tmux"
-CODEAGENT_TMPDIR = "/var/lib/codeagent-mcp/tmp"
 DEFAULT_SHELL = ("/bin/bash", "--norc", "--noprofile")
 SESSION_NAME = "codeagent"
 
@@ -66,10 +65,13 @@ def ensure_runtime_dirs() -> None:
 
 
 def codeagent_tmpdir() -> Path:
-    raw = os.environ.get("TMPDIR") or CODEAGENT_TMPDIR
-    path = Path(raw)
-    path.mkdir(parents=True, mode=0o700, exist_ok=True)
-    return path
+    """The same private temp root exec_run pins, created if absent.
+
+    Delegated so a pane shell and a child of ``exec_run`` cannot drift apart:
+    a tool that writes a temp file in one and reads it in the other has to find
+    the same directory.
+    """
+    return ensure_service_tmpdir()
 
 
 def _env() -> dict[str, str]:

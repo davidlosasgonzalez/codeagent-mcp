@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from codeagent_mcp.errors import tool_error, tool_ok
+from codeagent_mcp.exec.env import service_tmpdir
 from codeagent_mcp.workspace.lease_store import LeaseStore, LeaseStoreError
 from codeagent_mcp.workspace.projects import get_project, known_projects
 
@@ -75,7 +76,7 @@ class LeaseManager:
             )
 
         try:
-            return self.store.read_modify_write(
+            result = self.store.read_modify_write(
                 lambda data: self._acquire_locked(
                     data,
                     project=project_cfg.name,
@@ -91,6 +92,61 @@ class LeaseManager:
                 retryable=True,
                 next_action="Retry later; if it persists, inspect lease store on server",
             )
+
+        if result.get("ok") is True:
+            result = self._with_baseline(result, root=project_cfg.root)
+            result["tmpdir"] = str(service_tmpdir())
+        return result
+
+    def _with_baseline(self, result: dict[str, Any], *, root: str) -> dict[str, Any]:
+        """Snapshot the worktree for a freshly acquired lease and attach it.
+
+        Deliberately outside the store lock: hashing a large checkout takes
+        seconds, and no other writer should queue behind it. The cost is a small
+        window between grant and snapshot — a change landing inside it is
+        attributed to the lease, which is the safe direction to be wrong in.
+
+        A snapshot failure never fails the acquire: the lease is still valid,
+        only ``workspace_diff_since_acquire`` is unavailable on it.
+        """
+        # Imported here, not at module scope: git.service reads the project
+        # registry, which lives under this same package — a top-level import
+        # closes the cycle through workspace/__init__.
+        from codeagent_mcp.git.baseline import BaselineError, baseline_enabled, snapshot
+
+        if result.get("status") != "acquired" or not baseline_enabled():
+            return result
+        lease_id = str(result.get("lease_id") or "")
+        try:
+            baseline = snapshot(root)
+        except (BaselineError, OSError) as exc:
+            result["baseline"] = None
+            result["baseline_error"] = str(exc)[:300]
+            return result
+        try:
+            self.store.read_modify_write(
+                lambda data: self._attach_baseline_locked(
+                    data, lease_id=lease_id, baseline=baseline
+                )
+            )
+        except LeaseStoreError as exc:
+            result["baseline"] = None
+            result["baseline_error"] = str(exc)[:300]
+            return result
+        result["baseline"] = baseline
+        return result
+
+    @staticmethod
+    def _attach_baseline_locked(
+        data: dict[str, Any], *, lease_id: str, baseline: dict[str, str]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        leases: dict[str, Any] = dict(data.get("leases", {}))
+        rec = leases.get(lease_id)
+        if rec is None:
+            # Expired or released while we were hashing — nothing to attach to.
+            return tool_ok(status="stale"), {**data, "leases": leases}
+        leases[lease_id] = {**rec, "baseline": baseline}
+        return tool_ok(status="attached"), {**data, "leases": leases}
 
     def status(
         self,
@@ -170,11 +226,14 @@ class LeaseManager:
             "status": "held",
             "held": True,
             "expires_at": rec["expires_at"],
+            "has_baseline": bool(rec.get("baseline")),
         }
         # Reveal lease_id only to the authenticated holder (reconnect recovery).
         if holder_sub and rec.get("holder_sub") == holder_sub:
             payload["lease_id"] = lid
             payload["holder_match"] = True
+            payload["baseline"] = rec.get("baseline")
+            payload["tmpdir"] = str(service_tmpdir())
         return tool_ok(**payload)
 
     def release(self, *, lease_id: str) -> dict[str, Any]:
@@ -245,6 +304,7 @@ class LeaseManager:
                 mode=rec["mode"],
                 expires_at=rec["expires_at"],
                 status="active",
+                baseline=rec.get("baseline"),
             ),
             {**data, "leases": leases},
         )

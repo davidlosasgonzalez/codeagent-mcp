@@ -8,6 +8,7 @@ install a host-local projects.yaml with their own checkouts.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ class ProjectConfig:
     env: dict[str, str] = field(default_factory=dict)
     control_socket: str | None = None
     health_url: str | None = None
+    runtime_paths: dict[str, str] = field(default_factory=dict)
 
 
 def _parse_env(raw: Any, project: str) -> dict[str, str]:
@@ -87,6 +89,49 @@ def _parse_health_url(raw: Any, project: str) -> str | None:
     return url
 
 
+_RUNTIME_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+
+# Anything a client could read here is outside the project checkout, so the only
+# safe grant is one an operator typed on purpose: named, absolute, read-only.
+_RUNTIME_FORBIDDEN_ROOTS = ("/etc", "/root", "/proc", "/sys", "/dev", "/boot")
+
+
+def _parse_runtime_paths(raw: Any, project: str) -> dict[str, str]:
+    """Validate the optional read-only runtime views (name -> absolute directory).
+
+    These are *not* part of the writable project jail: they let a caller inspect
+    the data a deployed service actually runs on (a database directory, a state
+    dir) without handing it the filesystem. Reading still needs POSIX permission
+    — declaring a path authorizes it, it does not grant access to it.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"project {project!r}: 'runtime_paths' must be a mapping of name to path")
+    out: dict[str, str] = {}
+    for key, value in raw.items():
+        name = str(key)
+        if not _RUNTIME_NAME_RE.match(name):
+            raise ValueError(
+                f"project {project!r}: runtime path name {name!r} must match "
+                f"{_RUNTIME_NAME_RE.pattern}"
+            )
+        path = str(value).strip()
+        if not path.startswith("/"):
+            raise ValueError(f"project {project!r}: runtime path {name!r} must be absolute")
+        normalized = os.path.normpath(path)
+        if normalized == "/" or any(
+            normalized == bad or normalized.startswith(bad + "/")
+            for bad in _RUNTIME_FORBIDDEN_ROOTS
+        ):
+            raise ValueError(
+                f"project {project!r}: runtime path {name!r} points at a reserved "
+                f"system location ({normalized})"
+            )
+        out[name] = normalized
+    return out
+
+
 def _env_flag(name: str) -> bool:
     return os.environ.get(name, "0").strip() == "1"
 
@@ -121,6 +166,7 @@ def _parse_entry(raw: dict[str, Any]) -> ProjectConfig:
         env=_parse_env(raw.get("env"), name),
         control_socket=_parse_control_socket(raw.get("control_socket"), name),
         health_url=_parse_health_url(raw.get("health_url"), name),
+        runtime_paths=_parse_runtime_paths(raw.get("runtime_paths"), name),
     )
 
 

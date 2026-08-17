@@ -33,6 +33,8 @@ EXPECTED_ANNOTATIONS: dict[str, tuple[bool, bool, bool, bool]] = {
     "git_status": (True, False, True, False),
     "ops_cleanup": (False, True, False, False),
     "ops_status": (True, False, True, False),
+    "project_agent_read": (True, False, True, False),
+    "project_agents_list": (True, False, True, False),
     "project_bootstrap": (True, False, True, False),
     "project_instructions": (True, False, True, False),
     "project_skill_read": (True, False, True, False),
@@ -52,6 +54,7 @@ EXPECTED_ANNOTATIONS: dict[str, tuple[bool, bool, bool, bool]] = {
     "visual_compare": (False, False, False, False),
     "visual_get": (True, False, True, False),
     "workspace_acquire": (False, False, False, False),
+    "workspace_diff_since_acquire": (True, False, True, False),
     "workspace_release": (False, False, False, False),
     "workspace_status": (True, False, True, False),
 }
@@ -157,6 +160,8 @@ def test_tool_catalog_schema_snapshot() -> None:
         "git_status": "e46a29c432db256a",
         "ops_cleanup": "fdca8d9bd184204b",
         "ops_status": "fdca8d9bd184204b",
+        "project_agent_read": "d590192303495f38",
+        "project_agents_list": "0dc10550a8df06d2",
         "project_bootstrap": "deb2ea4496d9cf3c",
         "project_instructions": "d918b1d58ed79712",
         "project_skill_read": "53c7b0da20ae032d",
@@ -176,6 +181,7 @@ def test_tool_catalog_schema_snapshot() -> None:
         "visual_compare": "f5105dc39d443e52",
         "visual_get": "e49dc8a9f9ab28a4",
         "workspace_acquire": "01188f98e3634af9",
+        "workspace_diff_since_acquire": "33641ec1bbcaf69d",
         "workspace_release": "e0d7e26ee1ba2a92",
         "workspace_status": "0cd141f632a37230",
     }

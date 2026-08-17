@@ -19,7 +19,13 @@ GIT_TIMEOUT_S = 30
 DiffMode = Literal["unstaged", "staged", "both"]
 
 
-def _run_git(root: str, args: list[str]) -> subprocess.CompletedProcess[str]:
+def run_git(
+    root: str,
+    args: list[str],
+    *,
+    extra_env: dict[str, str] | None = None,
+    timeout_s: float = GIT_TIMEOUT_S,
+) -> subprocess.CompletedProcess[str]:
     # Worktrees / mixed root ownership trip Git "dubious ownership" for codeagent-mcp.
     # Scope the exception to this invocation only (not a system-wide safe.directory).
     return subprocess.run(
@@ -37,13 +43,18 @@ def _run_git(root: str, args: list[str]) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
-        timeout=GIT_TIMEOUT_S,
-        env={**os.environ, "LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0"},
+        timeout=timeout_s,
+        env={
+            **os.environ,
+            "LC_ALL": "C",
+            "GIT_TERMINAL_PROMPT": "0",
+            **(extra_env or {}),
+        },
     )
 
 
-def _ensure_repo(root: str) -> dict[str, Any] | None:
-    proc = _run_git(root, ["rev-parse", "--is-inside-work-tree"])
+def ensure_repo(root: str) -> dict[str, Any] | None:
+    proc = run_git(root, ["rev-parse", "--is-inside-work-tree"])
     if proc.returncode != 0 or proc.stdout.strip() != "true":
         detail = (proc.stderr or proc.stdout or "").strip()[:300]
         return tool_error(
@@ -55,7 +66,7 @@ def _ensure_repo(root: str) -> dict[str, Any] | None:
     return None
 
 
-def _resolve_pathspec(root: str, path: str) -> tuple[str | None, dict[str, Any] | None]:
+def resolve_pathspec(root: str, path: str) -> tuple[str | None, dict[str, Any] | None]:
     if not path or not path.strip():
         return None, None
     try:
@@ -90,19 +101,19 @@ def git_status(
             retryable=False,
         )
     root = cfg.root
-    err = _ensure_repo(root)
+    err = ensure_repo(root)
     if err is not None:
         return err
 
     max_entries = max(1, min(int(max_entries), HARD_MAX_ENTRIES))
-    pathspec, perr = _resolve_pathspec(root, path)
+    pathspec, perr = resolve_pathspec(root, path)
     if perr is not None:
         return perr
 
     args = ["status", "--porcelain=v2", "-b", "--untracked-files=all"]
     if pathspec:
         args.extend(["--", pathspec])
-    proc = _run_git(root, args)
+    proc = run_git(root, args)
     if proc.returncode != 0:
         return tool_error(
             "GIT_FAILED",
@@ -215,7 +226,7 @@ def git_diff(
             retryable=False,
         )
     root = cfg.root
-    err = _ensure_repo(root)
+    err = ensure_repo(root)
     if err is not None:
         return err
 
@@ -227,7 +238,7 @@ def git_diff(
             retryable=False,
         )
 
-    pathspec, perr = _resolve_pathspec(root, path)
+    pathspec, perr = resolve_pathspec(root, path)
     if perr is not None:
         return perr
 
@@ -243,7 +254,7 @@ def git_diff(
             args.append("--cached")
         if pathspec:
             args.extend(["--", pathspec])
-        proc = _run_git(root, args)
+        proc = run_git(root, args)
         if proc.returncode != 0:
             return
         for line in proc.stdout.splitlines():
@@ -270,7 +281,7 @@ def git_diff(
             args.append("--cached")
         if pathspec:
             args.extend(["--", pathspec])
-        proc = _run_git(root, args)
+        proc = run_git(root, args)
         if proc.returncode not in (0, 1):
             return ""
         return proc.stdout or ""

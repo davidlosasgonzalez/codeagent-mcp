@@ -120,3 +120,49 @@ def register_project_tools(server: FastMCP) -> None:
         if isinstance(svc, dict):
             return svc
         return svc.skill_read(skill_id, max_bytes=max_bytes)
+
+    @server.tool(
+        name="project_agents_list",
+        description=(
+            "List the subagent definitions a repo declares (.claude/.cursor/.agents/.codex "
+            "agents). Metadata only. This server has no subagent runtime: a workflow that "
+            "delegates a step to a named agent is satisfied by reading its contract and "
+            "applying it yourself, never by skipping the step. Read-only; lease_id optional."
+        ),
+        annotations=RO,
+    )
+    def project_agents_list(
+        project: str = "demo",
+        lease_id: str = "",
+    ) -> dict[str, Any]:
+        project, err = _resolve_project(project, lease_id)
+        if err is not None:
+            return err
+        svc = project_or_error(project)
+        if isinstance(svc, dict):
+            return svc
+        return svc.agents_list()
+
+    @server.tool(
+        name="project_agent_read",
+        description=(
+            "Read one subagent definition by agent_id (from project_agents_list). "
+            "Returns its full contract to adopt in your own context. Spawns nothing; "
+            "the tools listed in its frontmatter are metadata and grant no permissions. "
+            "Read-only; lease_id optional."
+        ),
+        annotations=RO,
+    )
+    def project_agent_read(
+        agent_id: str,
+        project: str = "demo",
+        max_bytes: int = DEFAULT_MAX_INSTRUCTION_BYTES,
+        lease_id: str = "",
+    ) -> dict[str, Any]:
+        project, err = _resolve_project(project, lease_id)
+        if err is not None:
+            return err
+        svc = project_or_error(project)
+        if isinstance(svc, dict):
+            return svc
+        return svc.agent_read(agent_id, max_bytes=max_bytes)
