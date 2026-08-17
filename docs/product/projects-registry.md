@@ -86,6 +86,46 @@ needs it.
 4. **Write gate** — `writable` / `writable_env` must allow writes (plus OS permissions).
 5. **systemd** — add writable roots to `ReadWritePaths=` in the unit; keep secrets in `InaccessiblePaths=` if needed.
 
+### When all five pass and writes still fail
+
+The layer that bites is the one with no error message: **the POSIX ACL mask**.
+
+Adding the service account to a project's group and granting it `rwx` is not enough. If
+the directory's mode leaves the group without write, the mask is computed from it and
+silently downgrades every group entry:
+
+```
+group:codeagent-myapp:rwx    #effective:r-x
+mask::r-x
+```
+
+The permission is granted and cancelled at once. Nothing logs it; writes just come back
+`Permission denied` while the registry, the write gate and `ReadWritePaths=` all look
+correct. Check it before re-reading any of them:
+
+```bash
+getfacl -p /srv/myapp | grep -E '^mask|effective'
+```
+
+To repair a tree whose entries are already granted but masked — and to make new files
+inherit both the group and the permission:
+
+```bash
+setfacl -R -m g:codeagent-myapp:rwX,g::rwX /srv/myapp
+find /srv/myapp -type d -print0 | xargs -0 setfacl -d -m g:codeagent-myapp:rwx,g::rwx
+find /srv/myapp -type d -print0 | xargs -0 chmod g+s
+```
+
+`rwX` (capital) is deliberate: write everywhere, execute only where it already applied.
+User bits are left alone, so Git — which tracks only the owner's execute bit — sees no
+mode changes across the tree.
+
+Then prove it rather than assuming it:
+
+```bash
+sudo -u codeagent-mcp touch /srv/myapp/.probe && sudo -u codeagent-mcp rm /srv/myapp/.probe
+```
+
 ## Day-2: add or remove a project
 
 1. Edit `/etc/codeagent-mcp/projects.yaml`.
