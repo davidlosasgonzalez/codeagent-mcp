@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from collections.abc import Sequence
@@ -9,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from codeagent_mcp.exec.env import child_umask, ensure_service_tmpdir
+
+log = logging.getLogger(__name__)
 
 DEFAULT_SOCKET = "/var/lib/codeagent-mcp/tmux/default.sock"
 DEFAULT_CONF = "/var/lib/codeagent-mcp/tmux/tmux.conf"
@@ -87,13 +90,32 @@ def _env() -> dict[str, str]:
     return env
 
 
+def tmpdir_env_pairs() -> list[tuple[str, str]]:
+    """The temp variables every pane shell must start with."""
+    tmp = str(codeagent_tmpdir())
+    return [(key, tmp) for key in ("TMPDIR", "TEMP", "TMP")]
+
+
 def sync_tmpdir_to_server() -> None:
-    """Push TMPDIR into the durable tmux server env (survives MCP restarts)."""
+    """Push TMPDIR into the durable tmux server env (survives MCP restarts).
+
+    ``set-environment`` takes the name and the value as **two arguments**. Passing
+    ``NAME=value`` as one is rejected with "variable name contains =", and because
+    the call tolerates failure the whole sync was a silent no-op: terminal_create
+    reported a tmpdir that the pane shell did not actually have. Hence the log
+    line — a sync that stops working must say so.
+    """
     if not server_alive():
         return
-    tmp = str(codeagent_tmpdir())
-    for key in ("TMPDIR", "TEMP", "TMP"):
-        run_tmux(["set-environment", "-g", f"{key}={tmp}"], check=False)
+    for key, value in tmpdir_env_pairs():
+        proc = run_tmux(["set-environment", "-g", key, value], check=False)
+        if proc.returncode != 0:
+            log.warning(
+                "tmux set-environment -g %s failed (rc=%s): %s",
+                key,
+                proc.returncode,
+                (proc.stderr or "").strip(),
+            )
 
 
 def tmux_argv(*args: str) -> list[str]:
@@ -223,6 +245,12 @@ def get_pane(pane_id: str) -> PaneInfo | None:
 def create_window(*, alias: str, cwd: str, shell: Sequence[str] = DEFAULT_SHELL) -> PaneInfo:
     ensure_server()
     sync_tmpdir_to_server()
+    # -e sets the variable on this pane directly, so a pane is correct even when
+    # the server's global environment is stale or was never synced. Unlike
+    # set-environment, new-window -e wants a single KEY=VALUE argument.
+    env_args: list[str] = []
+    for key, value in tmpdir_env_pairs():
+        env_args.extend(["-e", f"{key}={value}"])
     proc = run_tmux(
         [
             "new-window",
@@ -235,6 +263,7 @@ def create_window(*, alias: str, cwd: str, shell: Sequence[str] = DEFAULT_SHELL)
             alias,
             "-c",
             cwd,
+            *env_args,
             "--",
             *shell,
         ]
