@@ -20,6 +20,20 @@
     ]
   },
   {
+    "name": "browser_close",
+    "description": "Close the browser this lease opened, freeing its processes. Closing when nothing is running is success, not an error. Call it when finished with the browser; releasing the lease also closes it.",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false,
+    "properties": [
+      "lease_id"
+    ],
+    "required": [
+      "lease_id"
+    ]
+  },
+  {
     "name": "browser_ensure",
     "description": "Start or reuse an isolated headless Chromium session (loopback browsing). Optional width/height set the viewport (defaults 1280x720). Requires lease_id. Not durable across MCP process death \u2014 unlike tmux. Screenshots are visual_capture, not this tool.",
     "readOnlyHint": false,
@@ -102,7 +116,7 @@
   },
   {
     "name": "exec_run",
-    "description": "Run a non-interactive command as an argv list (no shell). Requires a valid exclusive lease_id from workspace_acquire. cwd must stay under the project root. Use for pytest/builds/scripts; use terminal_* later for interactive PTY. Requires lease; production checkout write gated by CODEAGENT_*_WRITE + project policy.",
+    "description": "Run a non-interactive command as an argv list (no shell). Set run_as to the account this project declares to run as that user (never root) through its privileged helper; stdout and stderr come back merged. Requires a valid exclusive lease_id from workspace_acquire. cwd must stay under the project root. Use for pytest/builds/scripts; use terminal_* later for interactive PTY. Requires lease; production checkout write gated by CODEAGENT_*_WRITE + project policy.",
     "readOnlyHint": false,
     "destructiveHint": true,
     "idempotentHint": false,
@@ -113,6 +127,7 @@
       "env_overrides",
       "lease_id",
       "max_output_bytes",
+      "run_as",
       "timeout_s"
     ],
     "required": [
@@ -284,7 +299,7 @@
   },
   {
     "name": "ops_cleanup",
-    "description": "Run safe cleanup: expired artifacts + aged spool files + orphan detection. Does not kill tmux panes or delete configured project roots.",
+    "description": "Run safe cleanup: expired artifacts, aged spool files, orphan detection, a browser whose lease is gone, stale exec-gate entries, and detached browser processes. Does not kill tmux panes or delete configured project roots.",
     "readOnlyHint": false,
     "destructiveHint": true,
     "idempotentHint": false,
@@ -294,7 +309,7 @@
   },
   {
     "name": "ops_status",
-    "description": "Operational status: orphan lease/terminal hints and last cleanup counters. Does not reveal secrets, tokens, or full transcripts.",
+    "description": "Operational status: orphan lease/terminal hints, browser and exec-gate state, and detached browser processes. Does not reveal secrets, tokens, or full transcripts.",
     "readOnlyHint": true,
     "destructiveHint": false,
     "idempotentHint": true,
@@ -394,7 +409,7 @@
   },
   {
     "name": "server_info",
-    "description": "Return CodeAgent MCP version and capability summary. Use on first contact. Does not include secrets, env, or host paths. Do not use for project orientation \u2014 that is project_bootstrap.",
+    "description": "Return CodeAgent MCP version, build identity and capability summary. Use on first contact. Does not include secrets, env, or host paths. capabilities.tool_surface.count and .fingerprint describe the tools the server is publishing right now: if they disagree with the tool list you hold, your catalogue is stale \u2014 re-discover before concluding an argument or tool does not exist. build.commit/dirty identify the deployed code. Do not use for project orientation \u2014 that is project_bootstrap.",
     "readOnlyHint": true,
     "destructiveHint": false,
     "idempotentHint": true,
@@ -655,7 +670,7 @@
   },
   {
     "name": "workspace_release",
-    "description": "Release an exclusive workspace lease by lease_id. Idempotent. Does not kill terminal sessions or processes. Do not use to steal another writer's lease unless you possess their lease_id.",
+    "description": "Release an exclusive workspace lease by lease_id. Idempotent. Closes the browser this lease opened; does not kill terminal sessions. Do not use to steal another writer's lease unless you possess their lease_id.",
     "readOnlyHint": false,
     "destructiveHint": false,
     "idempotentHint": false,

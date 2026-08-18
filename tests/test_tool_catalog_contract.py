@@ -16,6 +16,7 @@ from codeagent_mcp.server import create_server
 # Conservative annotation profile per tool (readOnly, destructive, idempotent, openWorld).
 EXPECTED_ANNOTATIONS: dict[str, tuple[bool, bool, bool, bool]] = {
     "browser_action": (False, False, False, False),
+    "browser_close": (False, False, False, False),
     "browser_ensure": (False, False, False, False),
     "browser_open": (False, False, False, False),
     "browser_reload": (False, False, False, False),
@@ -143,12 +144,13 @@ def test_tool_catalog_schema_snapshot() -> None:
     # Stable expected fingerprints; update deliberately when a schema changes.
     expected_fp = {
         "browser_action": "fb643df425e06fd0",
+        "browser_close": "e0d7e26ee1ba2a92",
         "browser_ensure": "d52bcbb2643c5191",
         "browser_open": "d44a3a2263d770e5",
         "browser_reload": "bbea661314c26888",
         "browser_set_viewport": "e00d7d1236e03439",
         "browser_snapshot": "e0d7e26ee1ba2a92",
-        "exec_run": "cc323ce4a3830792",
+        "exec_run": "79ba55643e18be5b",
         "fs_apply_patch": "3c5c266c1cb9e325",
         "fs_list": "e46a29c432db256a",
         "fs_read": "596b418517c8c1f1",

@@ -1,6 +1,6 @@
 [project]
 name = "codeagent-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Self-hosted MCP server that lets AI assistants work on code checkouts on your own machine"
 authors = [
     { name = "David Losas González", email = "davidlosas93@gmail.com" }

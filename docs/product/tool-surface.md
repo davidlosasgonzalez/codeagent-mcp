@@ -1,10 +1,10 @@
 # Tool surface — CodeAgent MCP
 
-A default install exposes **42 tools**. Source of truth for the names exposed to clients is `list_tools`; the machine-readable snapshot is [`tool-catalog.json`](tool-catalog.json), and `scripts/regression.sh` verifies the live server matches it.
+A default install exposes **43 tools**. Source of truth for the names exposed to clients is `list_tools`; the machine-readable snapshot is [`tool-catalog.json`](tool-catalog.json), and `scripts/regression.sh` verifies the live server matches it.
 
-Three more — `service_status`, `service_restart` and `service_start` — appear only when a project in the registry declares a `control_socket`. See [`service-control.md`](service-control.md).
+Six more — `service_status`, `service_logs`, `service_restart`, `service_start`, `service_action` and `http_check` — appear only when a project in the registry declares a `control_socket`. See [`service-control.md`](service-control.md).
 
-Two more — `runtime_list` and `runtime_read` — appear only when a project declares `runtime_paths`. See [`runtime-inspection.md`](runtime-inspection.md).
+Three more — `runtime_list`, `runtime_read` and `runtime_tail` — appear only when a project declares `runtime_paths`. See [`runtime-inspection.md`](runtime-inspection.md).
 
 The surface is deliberately frozen: new tools are added only in response to observed friction, because published ChatGPT apps may require recreate/republish after catalog changes.
 
@@ -74,7 +74,7 @@ No commit/push/checkout wrappers. Use `exec_run` for uncovered Git.
 
 | Tool | Role |
 |------|------|
-| `browser_ensure` / `browser_set_viewport` / `browser_reload` / `browser_open` / `browser_action` / `browser_snapshot` | Playwright loopback |
+| `browser_ensure` / `browser_set_viewport` / `browser_reload` / `browser_open` / `browser_action` / `browser_snapshot` / `browser_close` | Playwright loopback; browser_close frees its processes |
 | `visual_capture` / `visual_get` / `visual_compare` | ImageContent + artifacts |
 
 ## Ops
@@ -88,7 +88,70 @@ No commit/push/checkout wrappers. Use `exec_run` for uncovered Git.
 
 | Tool | Role |
 |------|------|
-| `server_info` | Build/identity probe |
+| `server_info` | Build identity, and whether your tool list is current |
+
+`server_info` answers two questions a client cannot answer from the tool list
+alone.
+
+**Which build is this?** `version` is the semver; `build` names the deployed
+code — `commit`, `dirty`, `deployed_at`. `dirty` matters more than it looks: a
+host redeployed from a working tree runs code no commit describes, and a commit
+sha on its own would name something else. With no stamp installed, the fields
+are `null` and `source` is `unstamped` — never a guess.
+
+The stamp lives at `/etc/codeagent-mcp/build.json`, root-owned and outside the
+checkout, so the service can read its identity and cannot write it. It is read
+once at process start: re-reading per call would report a stamp a later deploy
+wrote and this process never loaded.
+
+**Is my tool list current?** `capabilities.tool_surface` carries a `count` and a
+`fingerprint` over the tool names and their input properties. A client that
+compares them against its own view learns its catalogue is stale, instead of
+concluding a capability does not exist:
+
+> A cached `service_restart` schema without `wait_for_health_s` looks exactly
+> like a server that never had it. That cost a round trip, and the fingerprint
+> is the cheapest way to tell the two apart.
+
+Descriptions are excluded from the digest on purpose — a wording fix should not
+look like a capability change. Both numbers depend on the registry, since the
+gated tool groups above only appear for projects that declare them.
+
+## A stale catalogue is a real failure mode
+
+A client reported `service_restart` with `project` and `unit` but no
+`wait_for_health_s`, then re-discovered that one tool and saw all three. The
+implementation was never the problem, and it is worth recording where the
+problem is not:
+
+| Checked | Result |
+|---------|--------|
+| In-process `list_tools` | Full schema, 51 tools |
+| `tools/list` over the Streamable HTTP transport, middleware active | Identical, one page, no `nextCursor` |
+| Middleware | None implements `on_list_tools`; only `on_call_tool` |
+| Caddy | Plain `reverse_proxy`, no cache module |
+
+The shape that arrived is itself the evidence: `unit` present and
+`wait_for_health_s` absent describes this server exactly as it was between two
+deploys on 18/08/2026, and at no other time. That is a faithful copy of an
+older catalogue, not a corrupted one — so the copy is being kept somewhere
+upstream of this host.
+
+Three things help, none of which can reach that cache directly:
+
+- `/mcp/*` is served `Cache-Control: no-store` and `Vary: Authorization`, so no
+  HTTP-level intermediary may keep one.
+- The server `instructions`, delivered on `initialize`, tell a client to compare
+  `capabilities.tool_surface` against the tools it holds and to re-discover a
+  specific tool before deciding an argument does not exist.
+- **Tool results name the arguments they expect.** The reply that says *"pass
+  `wait_for_health_s` to poll instead of guessing"* is what made the client look
+  again, and it worked. A capability that only exists in a schema is one cache
+  away from invisible; one that a result mentions repairs the client's view for
+  free.
+
+After a deploy that changes the surface, refreshing the connector remains the
+reliable fix.
 
 ## Annotations (MCP metadata)
 

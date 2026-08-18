@@ -49,7 +49,12 @@ def create_server(
             "Use server_info first. Core has no ChatGPT runtime dependency. "
             "Project ids come from the server-side registry (CODEAGENT_PROJECTS_FILE). "
             "Use stable environment-specific identifiers; acquiring a lease is required "
-            "before mutating tools. Demo smoke project id is typically 'demo'."
+            "before mutating tools. Demo smoke project id is typically 'demo'. "
+            "If a broad tool listing reached you through a cache it may be older than "
+            "this server: compare capabilities.tool_surface from server_info against "
+            "the tools you hold, and re-discover a specific tool before concluding an "
+            "argument does not exist. Tool results name arguments they expect you to "
+            "use; trust that over a cached schema."
         ),
         auth=auth,
         middleware=middleware or [],
@@ -70,8 +75,12 @@ def create_server(
     @server.tool(
         name="server_info",
         description=(
-            "Return CodeAgent MCP version and capability summary. "
+            "Return CodeAgent MCP version, build identity and capability summary. "
             "Use on first contact. Does not include secrets, env, or host paths. "
+            "capabilities.tool_surface.count and .fingerprint describe the tools the "
+            "server is publishing right now: if they disagree with the tool list you "
+            "hold, your catalogue is stale — re-discover before concluding an argument "
+            "or tool does not exist. build.commit/dirty identify the deployed code. "
             "Do not use for project orientation — that is project_bootstrap."
         ),
         annotations=RO,
@@ -80,7 +89,15 @@ def create_server(
         # Derive from the live FastMCP registry — never a parallel hardcoded list.
         tools = await server.list_tools(run_middleware=False)
         names = sorted(t.name for t in tools)
-        return build_server_info(transport=transport, available_tools=names)
+        surface = [
+            {
+                "name": tool.name,
+                "properties": sorted((tool.parameters or {}).get("properties", {})),
+                "required": sorted((tool.parameters or {}).get("required", [])),
+            }
+            for tool in tools
+        ]
+        return build_server_info(transport=transport, available_tools=names, tool_surface=surface)
 
     return server
 
