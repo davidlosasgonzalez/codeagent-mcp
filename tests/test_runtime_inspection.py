@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -99,18 +100,18 @@ def live_view(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return live
 
 
-def _call(tool_name: str, **kwargs) -> dict:
+def _call(tool_name: str, **kwargs: Any) -> dict[str, Any]:
     """Invoke a runtime tool through the live server (kwargs are the tool's own args)."""
     from codeagent_mcp.tools import runtime as runtime_mod
 
-    async def _run() -> dict:
+    async def _run() -> dict[str, Any]:
         server = create_server(transport="stdio")
-        tool = await server.get_tool(tool_name)
-        return await tool.run(kwargs)  # type: ignore[no-any-return]
+        result = await server.call_tool(tool_name, kwargs)
+        assert result.structured_content is not None
+        return result.structured_content
 
     assert runtime_mod.projects_with_runtime_paths() == ("demo",)
-    result = asyncio.run(_run())
-    return result.structured_content or {}
+    return asyncio.run(_run())
 
 
 def test_runtime_list_without_a_name_reports_declared_views(live_view: Path) -> None:

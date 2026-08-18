@@ -51,7 +51,8 @@ cannot widen its own reach by naming a path.
 | Tool | Role |
 |------|------|
 | `runtime_list(project, name?, path?, max_entries?, lease_id?)` | With no `name`: the declared views. With `name`: a directory listing inside it |
-| `runtime_read(name, path, project?, max_bytes?, lease_id?)` | Byte-capped file read inside one view |
+| `runtime_read(name, path, project?, max_bytes?, lease_id?)` | Byte-capped file read inside one view, from the start |
+| `runtime_tail(name, path, project?, lines?, max_bytes?, lease_id?)` | The **last** lines of a file inside one view |
 
 Both are read-only. There is no runtime write, no runtime exec, and no way to reach the
 project checkout through them — a view is its own jail, resolved with the same `openat2`
@@ -59,6 +60,17 @@ confinement as `fs_read`.
 
 `lease_id` is optional and binds the call to the leased project when set, like the other
 read-only tools.
+
+## Reach for runtime_tail on anything that grows
+
+`runtime_read` starts at the beginning. On a log appended to all month, a
+byte-capped read returns the first day and never reaches the event anyone is
+asking about — a clean answer to the wrong question.
+
+`runtime_tail` walks backwards from the end, so its cost tracks the tail
+requested rather than the file. It reports `size_bytes` and sets `truncated`
+when it is holding only the end, so a caller can tell a whole short file from
+the last page of a long one.
 
 ## What it is not
 

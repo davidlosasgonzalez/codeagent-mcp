@@ -17,11 +17,13 @@ deployment that declares none does not expose these tools at all.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fastmcp import FastMCP
 
 from codeagent_mcp.errors import tool_error, tool_ok
+from codeagent_mcp.fs.openat2 import JailError, PathJail
 from codeagent_mcp.fs.service import (
     DEFAULT_MAX_LIST,
     DEFAULT_MAX_READ_BYTES,
@@ -30,6 +32,58 @@ from codeagent_mcp.fs.service import (
 from codeagent_mcp.tools.annotations import RO
 from codeagent_mcp.tools.workspace import get_lease_manager
 from codeagent_mcp.workspace.projects import ProjectConfig, get_project, known_projects
+
+DEFAULT_TAIL_LINES = 100
+MAX_TAIL_LINES = 5_000
+TAIL_MAX_BYTES = 500_000
+_TAIL_CHUNK = 65_536
+
+
+def _read_tail(root: str, path: str, lines: int, max_bytes: int) -> dict[str, object]:
+    """Return the last ``lines`` lines of a file without reading the whole thing.
+
+    Reading from the start is the wrong shape for the files these views hold: a
+    timings log grows all month, so a byte-capped read returns the beginning of
+    the month and never the event anyone is asking about. This walks backwards
+    from the end instead, so cost tracks the tail requested, not the file.
+    """
+    with PathJail(root) as jail:
+        fd = jail.open(path)
+        try:
+            size = os.fstat(fd).st_size
+            pos = size
+            data = b""
+            # One extra newline, so a partial first line can be dropped.
+            while pos > 0 and data.count(b"\n") <= lines and len(data) < max_bytes:
+                step = min(_TAIL_CHUNK, pos)
+                pos -= step
+                os.lseek(fd, pos, os.SEEK_SET)
+                block = b""
+                while len(block) < step:
+                    piece = os.read(fd, step - len(block))
+                    if not piece:
+                        break
+                    block += piece
+                data = block + data
+        finally:
+            os.close(fd)
+
+    partial = pos > 0
+    text = data.decode("utf-8", errors="replace")
+    kept = text.splitlines()[-lines:]
+    body = "\n".join(kept)
+    clipped = False
+    if len(body.encode("utf-8")) > max_bytes:
+        body = body.encode("utf-8")[-max_bytes:].decode("utf-8", errors="ignore")
+        clipped = True
+    return {
+        "content": body,
+        "lines_returned": len(kept),
+        "size_bytes": size,
+        # True when the file is longer than what was walked back through, so the
+        # caller knows it is holding the end and not the whole file.
+        "truncated": partial or clipped,
+    }
 
 
 def projects_with_runtime_paths() -> tuple[str, ...]:
@@ -145,6 +199,51 @@ def register_runtime_tools(server: FastMCP) -> None:
         if result.get("ok") is True:
             result["view"] = str(name).strip()
         return result
+
+    @server.tool(
+        name="runtime_tail",
+        description=(
+            "Read the LAST lines of a file under one of a project's read-only runtime "
+            "views. Use this rather than runtime_read for anything that grows — a log, a "
+            "jsonl of events — where reading from the start returns the oldest entries "
+            "and never reaches what you are looking for. Read-only; lease_id optional."
+        ),
+        annotations=RO,
+    )
+    def runtime_tail(
+        name: str,
+        path: str,
+        project: str = "demo",
+        lines: int = DEFAULT_TAIL_LINES,
+        max_bytes: int = TAIL_MAX_BYTES,
+        lease_id: str = "",
+    ) -> dict[str, Any]:
+        project, err = _resolve_project(project, lease_id)
+        if err is not None:
+            return err
+        cfg, root, err = _view(project, name)
+        if err is not None or cfg is None:
+            return err or {}
+        try:
+            count = max(1, min(int(lines), MAX_TAIL_LINES))
+            cap = max(1024, min(int(max_bytes), TAIL_MAX_BYTES))
+        except (TypeError, ValueError):
+            return tool_error(
+                "INVALID_ARGUMENT", "lines and max_bytes must be integers", retryable=False
+            )
+        try:
+            result = _read_tail(root, path, count, cap)
+        except JailError as exc:
+            return tool_error(exc.code, exc.message, retryable=False)
+        except OSError as exc:
+            return tool_error("INTERNAL_ERROR", str(exc), retryable=True)
+        return tool_ok(
+            project=cfg.name,
+            view=str(name).strip(),
+            path=path,
+            lines_requested=count,
+            **result,
+        )
 
     @server.tool(
         name="runtime_read",
