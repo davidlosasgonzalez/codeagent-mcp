@@ -94,7 +94,13 @@ def test_exec_run_injects_it_after_project_env(tmp_path: Path) -> None:
     """A project's own env map must not be able to shadow the exception."""
     from codeagent_mcp.exec.env import apply_project_env
 
-    env = apply_project_env({"PATH": "/usr/bin"}, {"GIT_CONFIG_COUNT": "9"})
+    # TMPDIR goes in the mapping, not the process environment: this helper
+    # resolves the temp root from what it is handed, and without it the
+    # production default is used and cannot be created off-host.
+    env = apply_project_env(
+        {"PATH": "/usr/bin", "TMPDIR": str(tmp_path / "svc-tmp")},
+        {"GIT_CONFIG_COUNT": "9"},
+    )
     # The project map is applied first; exec_run then overwrites it.
     env = apply_git_safe_directory(env, str(tmp_path))
     assert env["GIT_CONFIG_COUNT"] == "1"

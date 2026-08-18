@@ -78,6 +78,35 @@ def _global_env(prefix: str) -> list[str]:
     return [line for line in (proc.stdout or "").splitlines() if line.startswith(prefix)]
 
 
+def _pane_diagnostics(pane_id: str) -> str:
+    """What the pane and the server actually look like when nothing is echoed.
+
+    terminal_create already returned ok with this pane id, so the server is up
+    and the pane exists. Printing the pane contents and the process running in
+    it turns the next failure into evidence instead of another hypothesis.
+    """
+    parts: list[str] = []
+    for label, args in (
+        ("capture", ["capture-pane", "-p", "-t", pane_id]),
+        (
+            "panes",
+            [
+                "list-panes",
+                "-a",
+                "-F",
+                "#{pane_id} dead=#{pane_dead} cmd=#{pane_current_command} "
+                "size=#{pane_width}x#{pane_height}",
+            ],
+        ),
+        ("server", ["display-message", "-p", "#{version} pid=#{pid}"]),
+    ):
+        proc = tmux.run_tmux(args, check=False)
+        out = (proc.stdout or "").strip() or (proc.stderr or "").strip()
+        parts.append(f"  {label}: {out!r}")
+    parts.append(f"  SHELL={os.environ.get('SHELL')!r} TERM={os.environ.get('TERM')!r}")
+    return "\n".join(parts)
+
+
 def _echo_in_pane(pane_id: str, variable: str) -> str:
     """Run `echo MARK=[$VAR]` in the pane and return what it printed.
 
@@ -98,7 +127,9 @@ def _echo_in_pane(pane_id: str, variable: str) -> str:
                     return line[len("MARK=[") : -1]
             time.sleep(POLL_INTERVAL_S)
         if time.monotonic() >= deadline:
-            raise AssertionError(f"pane {pane_id} never echoed {variable}")
+            raise AssertionError(
+                f"pane {pane_id} never echoed {variable}\n{_pane_diagnostics(pane_id)}"
+            )
 
 
 def _start_server_without_tmpdir() -> None:
