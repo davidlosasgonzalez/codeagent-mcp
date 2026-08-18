@@ -61,3 +61,21 @@ cannot be changed from outside; recreate the terminal (`terminal_reset`).
 ## Known limitation
 
 Orphan panes from expired leases still count against the max-3 budget; reclaiming them is explicit today (`terminal_reset` / `terminal_close`). Automatic cleanup of expired-lease terminals is a possible future improvement.
+
+## The socket path has a hard ceiling
+
+`AF_UNIX` gives `sun_path` 108 bytes including the terminating NUL, so a tmux
+socket path over 107 bytes cannot bind. Nothing in this project can widen that.
+
+`terminal_create` checks before invoking tmux and answers with the remedy — set
+`CODEAGENT_TMUX_SOCKET` to something shorter — as a **non-retryable** error. It
+used to reach tmux, report "File name too long", and mark the result retryable,
+which invited a client to loop on a condition that will fail identically
+forever.
+
+The socket is not quietly relocated to a short path. That would put it somewhere
+the operator did not choose, and two deployments could then share one socket
+without either of them asking for it.
+
+The limit is counted in **bytes**, not characters: a path of accented directory
+names is longer than it looks.

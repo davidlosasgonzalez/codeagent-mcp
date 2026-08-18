@@ -204,6 +204,15 @@ class TerminalService:
         err = _validate_alias(alias)
         if err:
             return tool_error("INVALID_ARGUMENT", err, retryable=False)
+        if problem := tmux.socket_path_problem():
+            # Reported before tmux is invoked: retrying this never succeeds, and
+            # the previous INTERNAL_ERROR invited exactly that.
+            return tool_error(
+                "INVALID_ARGUMENT",
+                problem,
+                retryable=False,
+                next_action="Set CODEAGENT_TMUX_SOCKET to a shorter path and restart",
+            )
         root = lease["root"]
         try:
             workdir = str(resolve_under_root(cwd or root, root))

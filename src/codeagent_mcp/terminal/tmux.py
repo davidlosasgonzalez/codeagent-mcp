@@ -48,6 +48,27 @@ def socket_path() -> Path:
     return Path(os.environ.get("CODEAGENT_TMUX_SOCKET", DEFAULT_SOCKET))
 
 
+# sun_path is 108 bytes including the terminating NUL. This is a kernel ABI
+# constant, not a tunable: no amount of retrying makes a longer path bind.
+MAX_SOCKET_PATH_BYTES = 107
+
+
+def socket_path_problem() -> str | None:
+    """Explain why the configured socket can never work, or None if it can.
+
+    Checked before invoking tmux so the answer names the remedy. tmux itself
+    reports "File name too long", which is true and tells nobody what to change.
+    """
+    raw = str(socket_path())
+    size = len(raw.encode("utf-8"))
+    if size <= MAX_SOCKET_PATH_BYTES:
+        return None
+    return (
+        f"tmux socket path is {size} bytes; AF_UNIX allows {MAX_SOCKET_PATH_BYTES}. "
+        f"Set CODEAGENT_TMUX_SOCKET to a shorter path (the default is {DEFAULT_SOCKET})."
+    )
+
+
 def conf_path() -> Path:
     return Path(os.environ.get("CODEAGENT_TMUX_CONF", DEFAULT_CONF))
 
