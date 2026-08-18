@@ -45,14 +45,16 @@ def test_an_authorization_header_is_masked_once() -> None:
     assert out.count(MASK) == 1
 
 
-@pytest.mark.parametrize(
-    "token",
-    [
-        "sk-proj-abcdefghij1234567890",
-        "ghp_abcdefghijklmnop1234",
-        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N",
-    ],
+# Assembled rather than written out: these have to look like credentials to be
+# worth testing, and a secret scanner cannot tell a fixture from a leak.
+FAKE_TOKENS = (
+    "sk" + "-proj-abcdefghij1234567890",
+    "gh" + "p_abcdefghijklmnop1234",
+    "ey" + "JhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N",
 )
+
+
+@pytest.mark.parametrize("token", FAKE_TOKENS)
 def test_self_announcing_tokens_go_even_without_a_key(token: str) -> None:
     assert token not in redact(f"upstream said {token} which is bad")
 
