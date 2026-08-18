@@ -1,0 +1,305 @@
+#!/bin/bash
+# One connection, one command, for one registered project.
+#
+# The authorization boundary is the socket (root:codeagent-mcp 0660) plus this
+# file: verbs are a fixed set, and a unit name coming down the wire is only
+# honoured when the operator already wrote it into the project's conf. Nothing
+# here can be pointed at an arbitrary unit, which is what keeps "the agent can
+# restart my app" from becoming "the agent can restart anything".
+set -euo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export LANG=C
+
+PROJECT=${1:?project required}
+CONF="/etc/codeagent-mcp/ctl/${PROJECT}.conf"
+[[ -f $CONF ]] || { echo "ERR unknown_project"; exit 2; }
+# shellcheck source=/dev/null
+source "$CONF"
+: "${PRIMARY:?PRIMARY missing in $CONF}"
+
+DEFAULT_LINES=60
+MAX_LINES=300
+ACTIVE_TIMEOUT=45
+# A unit that comes up and dies two seconds later is not a successful restart.
+SETTLE_S=5
+
+IFS= read -r -t 5 line || { echo "ERR timeout/empty"; exit 1; }
+line=${line%%$'\r'}
+read -r verb tok1 tok2 extra <<<"${line:-}"
+[[ -z ${extra:-} ]] || { echo "ERR too_many_args"; exit 2; }
+
+resolve_unit() {
+  local want=${1:-}
+  if [[ -z $want ]]; then printf '%s\n' "$PRIMARY"; return 0; fi
+  local u
+  for u in "${UNITS[@]}"; do
+    if [[ $u == "$want" || $u == "${want}.service" ]]; then printf '%s\n' "$u"; return 0; fi
+  done
+  return 1
+}
+
+lines_arg() {
+  local n=${1:-}
+  if [[ -z $n ]]; then printf '%s\n' "$DEFAULT_LINES"; return 0; fi
+  [[ $n =~ ^[0-9]+$ ]] || return 1
+  (( n > MAX_LINES )) && n=$MAX_LINES
+  (( n < 1 )) && n=1
+  printf '%s\n' "$n"
+}
+
+# tok1 may be a unit or, for LOGS/STATUS, a bare line count.
+unit_token=${tok1:-}
+count_token=${tok2:-}
+if [[ $unit_token =~ ^[0-9]+$ ]]; then
+  count_token=$unit_token
+  unit_token=""
+fi
+
+report_unit() {
+  local u=$1 n=$2
+  echo "=== $u ==="
+  systemctl is-active "$u" || true
+  systemctl show "$u" -p ActiveState -p SubState -p MainPID -p NRestarts \
+    -p ExecMainStartTimestamp --no-page
+  echo "--- last $n log lines ---"
+  journalctl -u "$u" -n "$n" --no-pager -o short-iso || true
+}
+
+wait_active() {
+  local u=$1 end=$((SECONDS + ACTIVE_TIMEOUT))
+  while (( SECONDS < end )); do
+    [[ "$(systemctl is-active "$u" || true)" == "active" ]] && return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+stays_active() {
+  local u=$1 end=$((SECONDS + SETTLE_S))
+  while (( SECONDS < end )); do
+    [[ "$(systemctl is-active "$u" || true)" == "active" ]] || return 1
+    sleep 0.5
+  done
+  return 0
+}
+
+# systemd calls a Type=simple unit active the moment it forks, which for a web
+# app is well before it binds its port — measured at ten seconds on one web tier,
+# during which a restart reported success and the app answered nothing. So a
+# unit that declares a health URL is not "restarted" until that URL answers.
+health_url_for() {
+  local u=$1
+  local key="HEALTH_${u%.service}"
+  key=${key//[.-]/_}
+  printf '%s\n' "${!key:-${HEALTH_URL:-}}"
+}
+
+wait_health() {
+  local url
+  url=$(health_url_for "$1")
+  [[ -z $url ]] && return 0
+  local end=$((SECONDS + ACTIVE_TIMEOUT))
+  while (( SECONDS < end )); do
+    curl -fsS -m 2 "$url" >/dev/null 2>&1 && return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+case "${verb:-}" in
+  STATUS|status)
+    n=$(lines_arg "$count_token") || { echo "ERR bad_line_count"; exit 2; }
+    if [[ -n $unit_token ]]; then
+      u=$(resolve_unit "$unit_token") || { echo "ERR unit_not_declared"; exit 2; }
+      report_unit "$u" "$n"
+    else
+      for u in "${UNITS[@]}"; do report_unit "$u" 10; done
+    fi
+    ;;
+
+  LOGS|logs)
+    n=$(lines_arg "$count_token") || { echo "ERR bad_line_count"; exit 2; }
+    u=$(resolve_unit "$unit_token") || { echo "ERR unit_not_declared"; exit 2; }
+    echo "=== $u : last $n lines ==="
+    journalctl -u "$u" -n "$n" --no-pager -o short-iso || true
+    ;;
+
+  RESTART|restart)
+    u=$(resolve_unit "$unit_token") || { echo "ERR unit_not_declared"; exit 2; }
+    systemctl restart "$u"
+    if wait_active "$u" && stays_active "$u" && wait_health "$u"; then
+      echo "restart_ok active unit=$u"
+      systemctl show "$u" -p ActiveState -p SubState -p MainPID --no-page
+      echo "--- recent logs ---"
+      journalctl -u "$u" -n 30 --no-pager -o short-iso || true
+      exit 0
+    fi
+    echo "restart_failed unit=$u state=$(systemctl is-active "$u" || true)" >&2
+    journalctl -u "$u" -n 80 --no-pager -o short-iso || true
+    exit 1
+    ;;
+
+  START|start)
+    u=$(resolve_unit "$unit_token") || { echo "ERR unit_not_declared"; exit 2; }
+    systemctl start "$u"
+    if wait_active "$u" && stays_active "$u" && wait_health "$u"; then
+      echo "start_ok active unit=$u"
+      exit 0
+    fi
+    echo "start_failed unit=$u" >&2
+    journalctl -u "$u" -n 80 --no-pager -o short-iso || true
+    exit 1
+    ;;
+
+  SNAPSHOT|snapshot)
+    # A live WAL database cannot be read safely by another account: even a reader
+    # needs to write -wal/-shm, and granting that means granting write inside the
+    # directory the credentials live in. So the owner takes a consistent copy and
+    # only the copy is shared.
+    # Delegated to a unit that runs as the database's own account. Dropping
+    # privileges inside this helper is the obvious alternative and does not
+    # survive its socket-activated sandbox: runuser cannot change uid under
+    # NoNewPrivileges, and setpriv dies with a bare 127 from here while working
+    # fine outside it. systemctl is already proven to work from this context, so
+    # the snapshot rides the same mechanism as the other verbs.
+    if [[ -z ${SNAPSHOT_UNIT:-} || -z ${SNAPSHOT_FILE:-} ]]; then
+      echo "ERR snapshot_not_configured"; exit 2
+    fi
+    systemctl start "$SNAPSHOT_UNIT"
+    if [[ ! -f $SNAPSHOT_FILE ]]; then
+      echo "snapshot_failed unit=$SNAPSHOT_UNIT" >&2
+      journalctl -u "$SNAPSHOT_UNIT" -n 20 --no-pager -o short-iso || true
+      exit 1
+    fi
+    echo "snapshot_ok $SNAPSHOT_FILE"
+    stat -c "bytes=%s mtime=%y" "$SNAPSHOT_FILE"
+    ;;
+
+  RUNAS|runas)
+    # Run a command as the project's own account.
+    #
+    # The MCP cannot do this itself: its unit sets NoNewPrivileges, so sudo and
+    # every setuid path are closed to it. That is a feature — it means the only
+    # way to become another user is through here, where the target account is
+    # fixed by the operator's conf and can never be root.
+    #
+    # The argv arrives in a spool file rather than on this line, because a line
+    # protocol cannot carry a command with spaces in it without inventing a
+    # quoting scheme, and inventing a quoting scheme in front of a privileged
+    # exec is how shell injection gets built by accident.
+    if [[ -z ${RUNAS_USER:-} ]]; then
+      echo "ERR runas_not_configured"; exit 2
+    fi
+    if [[ $RUNAS_USER == root || $RUNAS_USER == 0 ]]; then
+      echo "ERR runas_user_may_not_be_root"; exit 2
+    fi
+    token=${unit_token:-}
+    [[ $token =~ ^[A-Za-z0-9_-]{16,64}$ ]] || { echo "ERR bad_token"; exit 2; }
+    spool="${RUNAS_SPOOL:-/var/lib/codeagent-mcp/runas}/${token}.json"
+    [[ -f $spool ]] || { echo "ERR spool_missing"; exit 2; }
+
+    # The helper re-derives argv and cwd from the spool itself and re-checks the
+    # root: it does not take the caller's word for confinement just because the
+    # caller already checked. python3 emits NUL-separated fields so no value can
+    # be split or re-interpreted on the way in.
+    mapfile -t -d '' fields < <(
+      python3 - "$spool" "${RUNAS_ROOT:-/}" <<'PY'
+import json, os, sys
+spec = json.load(open(sys.argv[1]))
+root = os.path.realpath(sys.argv[2])
+cwd = os.path.realpath(spec.get("cwd") or root)
+if os.path.commonpath([cwd, root]) != root:
+    raise SystemExit("cwd escapes project root")
+argv = spec.get("argv") or []
+if not argv or not all(isinstance(a, str) for a in argv):
+    raise SystemExit("argv must be a non-empty list of strings")
+timeout = int(spec.get("timeout_s") or 120)
+out = [cwd, str(max(1, min(timeout, 900))), *argv]
+sys.stdout.write("\0".join(out) + "\0")
+PY
+    ) || { echo "ERR bad_spec"; exit 2; }
+
+    rm -f "$spool"
+    (( ${#fields[@]} >= 3 )) || { echo "ERR bad_spec"; exit 2; }
+    runas_cwd=${fields[0]}
+    runas_timeout=${fields[1]}
+    runas_argv=("${fields[@]:2}")
+
+    # systemd-run, not setpriv: setpriv dies with a bare 127 inside this
+    # socket-activated sandbox, while systemd is reachable from here (every
+    # other verb depends on it).
+    rc=0
+    systemd-run --quiet --pipe --wait --collect \
+      --uid="$RUNAS_USER" --gid="$RUNAS_USER" \
+      --property="WorkingDirectory=${runas_cwd}" \
+      --property="RuntimeMaxSec=${runas_timeout}" \
+      -- "${runas_argv[@]}" || rc=$?
+    # The socket carries bytes, not a process result. Without this trailer the
+    # caller sees output and has to guess whether the command succeeded — and a
+    # tool that reports "done" off a guess is exactly what this project refuses
+    # to ship. The MCP strips this line and reports the code.
+    printf '\n__codeagent_exit__=%s\n' "$rc"
+    ;;
+
+  ACTION|action)
+    # A named piece of work the operator wrote down, run as the project account.
+    #
+    # This exists beside RUNAS rather than instead of it. RUNAS lets the caller
+    # choose the command; some clients refuse to send that, and refusing is a
+    # reasonable thing for a client to do about "run this as another user".
+    # ACTION removes the choice: the command is fixed here, the caller only
+    # names it, and the set of names is whatever the operator declared. Strictly
+    # less capability, for the cases where less is enough.
+    if [[ -z ${RUNAS_USER:-} ]]; then
+      echo "ERR runas_not_configured"; exit 2
+    fi
+    if [[ $RUNAS_USER == root || $RUNAS_USER == 0 ]]; then
+      echo "ERR runas_user_may_not_be_root"; exit 2
+    fi
+    name=${unit_token:-}
+    if [[ -z $name ]]; then
+      # No name: list what is on offer, so a caller can discover them.
+      for var in $(compgen -A variable | grep '^ACTION_' || true); do
+        printf '%s\n' "${var#ACTION_}"
+      done
+      exit 0
+    fi
+    [[ $name =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || { echo "ERR bad_action_name"; exit 2; }
+    key="ACTION_${name//-/_}"
+    cmdline=${!key:-}
+    [[ -n $cmdline ]] || { echo "ERR action_not_declared"; exit 2; }
+
+    # An action may declare an environment file: ACTIONENV_<name>. systemd reads
+    # it as root and hands the values to the process, so the target account never
+    # needs read access to the secrets directory — which is a smaller grant than
+    # loosening that directory's permissions, and leaves nothing new readable on
+    # disk. The values are never echoed back; only the command's own output is.
+    envkey="ACTIONENV_${name//-/_}"
+    envfile=${!envkey:-}
+    env_args=()
+    if [[ -n $envfile ]]; then
+      [[ -f $envfile ]] || { echo "ERR action_envfile_missing"; exit 2; }
+      env_args=(--property="EnvironmentFile=${envfile}")
+    fi
+
+    rc=0
+    # Word-splitting is intended: the operator wrote this line, not the caller.
+    # Globbing is not: set -f stops a stray * in a declared command from
+    # expanding against whatever happens to sit in the working directory.
+    # shellcheck disable=SC2086
+    set -f
+    systemd-run --quiet --pipe --wait --collect \
+      --uid="$RUNAS_USER" --gid="$RUNAS_USER" \
+      --property="WorkingDirectory=${RUNAS_ROOT:-/}" \
+      --property="RuntimeMaxSec=${ACTIONS_TIMEOUT_S:-300}" \
+      "${env_args[@]}" \
+      -- $cmdline || rc=$?
+    set +f
+    printf '\n__codeagent_exit__=%s\n' "$rc"
+    ;;
+
+  *)
+    echo "ERR unknown_command"
+    exit 2
+    ;;
+esac

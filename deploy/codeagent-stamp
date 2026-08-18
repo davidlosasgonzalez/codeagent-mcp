@@ -1,0 +1,34 @@
+#!/bin/bash
+# Record which build is about to start serving.
+#
+# Written before the restart, so the process that comes up reads its own
+# identity. Root-owned and outside the checkout: the service can read it and
+# cannot forge it. `dirty` is the field that matters here — this host is
+# redeployed from a working tree, so the commit alone would name code that is
+# not what is running.
+set -euo pipefail
+
+REPO=${CODEAGENT_REPO:-/opt/codeagent-mcp}
+STAMP=/etc/codeagent-mcp/build.json
+NOTE="${1:-}"
+
+cd "$REPO"
+COMMIT=$(git -c safe.directory="$REPO" rev-parse --short HEAD)
+# --porcelain, not `diff --quiet`: an untracked new module is running code too,
+# and diff does not see it.
+if [ -z "$(git -c safe.directory="$REPO" status --porcelain)" ]; then
+  DIRTY=false
+else
+  DIRTY=true
+fi
+
+install -m 0640 -o root -g codeagent-mcp /dev/null "$STAMP"
+cat > "$STAMP" <<JSON
+{
+  "commit": "$COMMIT",
+  "dirty": $DIRTY,
+  "deployed_at": "$(date -Is)",
+  "note": "$NOTE"
+}
+JSON
+echo "  sello: $COMMIT dirty=$DIRTY"
