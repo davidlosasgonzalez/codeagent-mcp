@@ -103,6 +103,49 @@ class BrowserService:
             )
         return None
 
+    def is_running(self) -> bool:
+        return self._browser is not None
+
+    def owner_lease_id(self) -> str | None:
+        return self._owner_lease_id
+
+    def close(self, *, lease_id: str = "", force: bool = False) -> dict[str, Any]:
+        """Close the browser. Closing a browser that is not running is success.
+
+        Idempotence matters here: a caller that has to check first will skip the
+        check, and a browser nobody closed is the whole problem.
+        """
+        if not self.is_running():
+            return {"ok": True, "closed": False, "reason": "no browser running"}
+        owner = self._owner_lease_id
+        if not force and owner and lease_id and owner != lease_id:
+            return tool_error(
+                "AUTHORIZATION_DENIED",
+                "browser session owned by a different lease",
+                retryable=False,
+            )
+        self.shutdown()
+        return {"ok": True, "closed": True, "was_owned_by": owner}
+
+    def reap_if_stale(self) -> dict[str, Any]:
+        """Close a browser whose owning lease is no longer active.
+
+        A lease that expired quietly used to leave the browser running with
+        nobody able to reclaim or close it. Asking the lease manager is the
+        cheapest authority on whether anyone is still driving.
+        """
+        if not self.is_running():
+            return {"reaped": False, "reason": "no browser running"}
+        owner = self._owner_lease_id
+        if not owner:
+            self.shutdown()
+            return {"reaped": True, "reason": "browser had no owning lease"}
+        lease = get_lease_manager().require_active(lease_id=owner)
+        if lease.get("ok"):
+            return {"reaped": False, "reason": "owning lease is still active"}
+        self.shutdown()
+        return {"reaped": True, "reason": "owning lease is gone", "was_owned_by": owner}
+
     @staticmethod
     def _normalize_viewport(
         width: int | None, height: int | None, *, fallback: dict[str, int] | None = None

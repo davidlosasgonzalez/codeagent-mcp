@@ -70,3 +70,15 @@ variable and has to be recreated.
 Recoverable conflicts return `{ok:false, error:{code,message,retryable,next_action,...}}` with codes `LEASE_BUSY`, `LEASE_EXPIRED`, `INVALID_ARGUMENT`, `BASELINE_UNAVAILABLE`, `INTERNAL_ERROR`.
 
 Mutating/exec tools such as `exec_run` require an active `lease_id` (see [`exec-run.md`](exec-run.md)).
+
+## Baseline in a long session
+
+The baseline is taken when the lease is acquired. If a lease expires mid-session
+and a new one is acquired, the new baseline is the tree **as it is now** —
+including everything done under the old lease. `workspace_diff_since_acquire`
+is then correct and useless for reconstructing the earlier work.
+
+This is the contract working as designed, not a defect, but it has a
+consequence worth stating: in a long implementation session, capture the diff
+before the lease lapses. Renewing by activity is what keeps a lease alive, so a
+long stretch of thinking with no tool calls is exactly when one expires.

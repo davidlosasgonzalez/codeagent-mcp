@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 
 from codeagent_mcp.browser.service import get_browser_service, set_browser_service
 from codeagent_mcp.tools.annotations import MUT, RO
+from codeagent_mcp.tools.workspace import get_lease_manager
 
 ActionName = Literal["click", "fill", "press", "select", "wait"]
 
@@ -96,6 +97,21 @@ def register_browser_tools(server: FastMCP) -> None:
             key=key,
             timeout_ms=timeout_ms,
         )
+
+    @server.tool(
+        name="browser_close",
+        description=(
+            "Close the browser this lease opened, freeing its processes. "
+            "Closing when nothing is running is success, not an error. "
+            "Call it when finished with the browser; releasing the lease also closes it."
+        ),
+        annotations=MUT,
+    )
+    def browser_close(lease_id: str) -> dict[str, Any]:
+        lease = get_lease_manager().require_active(lease_id=lease_id)
+        if not lease.get("ok"):
+            return lease
+        return get_browser_service().close(lease_id=str(lease["lease_id"]))
 
     @server.tool(
         name="browser_snapshot",

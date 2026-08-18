@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import time
 from pathlib import Path
 from typing import Any
@@ -127,6 +128,103 @@ def detect_orphans(
     return result
 
 
+# A browser bundle lives under this root; a chrome process launched from
+# anywhere else is not ours to touch.
+DEFAULT_BROWSERS_ROOT = "/var/lib/codeagent-mcp/playwright"
+
+# Below this age a detached browser is probably still starting up.
+ORPHAN_BROWSER_MIN_AGE_S = 600
+
+
+def _proc_field(pid: int, name: str) -> str:
+    try:
+        return (Path("/proc") / str(pid) / name).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def find_orphan_browsers(
+    *,
+    browsers_root: str | None = None,
+    min_age_s: int = ORPHAN_BROWSER_MIN_AGE_S,
+) -> list[dict[str, Any]]:
+    """Detached browser processes launched from our bundle.
+
+    Detached means reparented to init: whatever started it is gone, so nothing
+    is ever going to close it. Three of these reached 33 and 71 hours on this
+    host and held roughly 247% CPU of two cores between them.
+    """
+    root = browsers_root or os.environ.get("CODEAGENT_BROWSERS", DEFAULT_BROWSERS_ROOT)
+    try:
+        clock = os.sysconf("SC_CLK_TCK")
+        uptime = float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+    except (OSError, ValueError):
+        return []
+    found: list[dict[str, Any]] = []
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return []
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        cmdline = _proc_field(pid, "cmdline").replace("\x00", " ").strip()
+        if not cmdline.startswith(root):
+            continue
+        stat = _proc_field(pid, "stat")
+        tail = stat.rpartition(")")[2].split()
+        if len(tail) < 20:
+            continue
+        try:
+            ppid = int(tail[1])
+            started = float(tail[19]) / clock
+        except (ValueError, ZeroDivisionError):
+            continue
+        if ppid != 1:
+            continue  # still owned by a live parent
+        age = uptime - started
+        if age < min_age_s:
+            continue
+        found.append(
+            {
+                "pid": pid,
+                "age_s": int(age),
+                "command": cmdline[:120],
+                "signalable": os.access(f"/proc/{pid}", os.W_OK),
+            }
+        )
+    return sorted(found, key=lambda row: -row["age_s"])
+
+
+def reap_orphan_browsers(**kwargs: Any) -> dict[str, Any]:
+    """Kill the detached browsers we are allowed to signal; report the rest.
+
+    A process owned by another user cannot be signalled from here, and saying
+    so is the point: the CPU is still being burned, and someone with the
+    privilege has to act. Silently reporting zero would be the worse answer.
+    """
+    killed: list[int] = []
+    unreachable: list[dict[str, Any]] = []
+    for row in find_orphan_browsers(**kwargs):
+        try:
+            os.kill(row["pid"], signal.SIGKILL)
+            killed.append(row["pid"])
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            unreachable.append(row)
+    emit_audit(
+        {
+            "event": "reap_orphan_browsers",
+            "ok": True,
+            "killed": len(killed),
+            "unreachable": len(unreachable),
+        }
+    )
+    return {"killed": killed, "unreachable": unreachable}
+
+
 def run_startup_cleanup() -> dict[str, Any]:
     """Idempotent cleanup suitable for process start."""
     from codeagent_mcp.artifact_store.store import ArtifactStore
@@ -135,8 +233,19 @@ def run_startup_cleanup() -> dict[str, Any]:
     removed_arts = arts.cleanup_expired()
     spool = cleanup_spool()
     orphans = detect_orphans()
+
+    # Deferred: the browser service imports the tool layer, which imports this.
+    from codeagent_mcp.browser.service import get_browser_service
+    from codeagent_mcp.exec.gate import get_exec_gate
+
+    browser = get_browser_service().reap_if_stale()
+    stale_execs = get_exec_gate().sweep()
+    detached = reap_orphan_browsers()
     return {
         "artifacts_removed": removed_arts,
         "spool": spool,
         "orphans": orphans,
+        "browser": browser,
+        "stale_exec_gate_entries": stale_execs,
+        "detached_browsers": detached,
     }

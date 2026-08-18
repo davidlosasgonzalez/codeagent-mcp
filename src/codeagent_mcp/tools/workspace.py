@@ -93,13 +93,23 @@ def register_workspace_tools(server: FastMCP) -> None:
         name="workspace_release",
         description=(
             "Release an exclusive workspace lease by lease_id. Idempotent. "
-            "Does not kill terminal sessions or processes. "
+            "Closes the browser this lease opened; does not kill terminal sessions. "
             "Do not use to steal another writer's lease unless you possess their lease_id."
         ),
         annotations=MUT,
     )
     def workspace_release(lease_id: str) -> dict[str, Any]:
-        return get_lease_manager().release(lease_id=lease_id)
+        result = get_lease_manager().release(lease_id=lease_id)
+        # Deferred: browser.service imports this module, so importing it at
+        # module level closes an import cycle.
+        from codeagent_mcp.browser.service import get_browser_service
+
+        browser = get_browser_service()
+        if browser.owner_lease_id() == str(lease_id).strip():
+            closed = browser.close(force=True)
+            if isinstance(result, dict):
+                result = {**result, "browser_closed": bool(closed.get("closed"))}
+        return result
 
     @server.tool(
         name="workspace_diff_since_acquire",
