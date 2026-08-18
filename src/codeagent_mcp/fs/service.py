@@ -278,14 +278,28 @@ class FsService:
                 )
         try:
             with self._jail() as jail:
-                # ensure search root is confined directory
-                dir_fd = jail.open(path, directory=True)
-                os.close(dir_fd)
-                search_dir = jail.display_path(path)
+                # A file target is confined the same way a directory is; rg is
+                # given the directory as cwd and the file as its one pathspec, so
+                # nothing outside the jail is ever named.
+                target_file = ""
+                try:
+                    dir_fd = jail.open(path, directory=True)
+                    os.close(dir_fd)
+                    search_dir = jail.display_path(path)
+                except JailError:
+                    file_fd = jail.open(path)
+                    os.close(file_fd)
+                    resolved = Path(jail.display_path(path))
+                    search_dir = str(resolved.parent)
+                    target_file = resolved.name
                 cmd = [
                     rg,
                     "--line-number",
                     "--no-heading",
+                    # Without this, a single explicit file target makes rg drop
+                    # the path column and the match parser silently discards
+                    # every line.
+                    "--with-filename",
                     "--color",
                     "never",
                     "--max-count",
@@ -298,7 +312,7 @@ class FsService:
                     cmd.extend(["--glob", glob])
                 if literal:
                     cmd.append("--fixed-strings")
-                cmd.extend(["--", query, "."])
+                cmd.extend(["--", query, target_file or "."])
                 started = time.monotonic()
                 try:
                     proc = subprocess.run(  # noqa: S603
