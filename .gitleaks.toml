@@ -1,0 +1,21 @@
+# Secret-scan configuration.
+#
+# The default rules are kept in full; this only adds one exception.
+#
+# tests/test_redaction.py exists to prove that credential-shaped values never
+# leave the server, so it has to contain credential-shaped values. A scanner
+# cannot tell a fixture from a leak, and three invented strings there failed the
+# scan for the whole repository.
+#
+# The exception is scoped to that one path, and the file itself assembles its
+# token prefixes at run time — so a literal credential appearing there would be
+# an anomaly in review even though the scanner would now stay quiet about it.
+# That is the cost of this entry, and it is why it names one file rather than a
+# directory or a rule.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Invented credentials used as fixtures by the redaction tests"
+paths = ['''^tests/test_redaction\.py$''']

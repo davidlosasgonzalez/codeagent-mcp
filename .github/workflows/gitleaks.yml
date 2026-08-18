@@ -24,4 +24,4 @@ jobs:
       # Scans the whole history on every run, so a rewritten or force-pushed
       # branch is checked in full instead of as a commit range.
       - name: Scan repository history
-        run: gitleaks git --redact --no-banner --verbose .
+        run: gitleaks git --config .gitleaks.toml --redact --no-banner --verbose .
