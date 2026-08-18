@@ -26,8 +26,12 @@ from codeagent_mcp.tools.workspace import set_lease_manager
 from codeagent_mcp.workspace.lease_store import LeaseStore
 from codeagent_mcp.workspace.leases import LeaseManager
 
-PANE_SETTLE_S = 2.0
+# Generous because a cold CI runner starts a shell far slower than this host,
+# and the cost of waiting is seconds while the cost of not waiting is a red
+# build that says nothing about the code.
+PANE_SETTLE_S = 20.0
 POLL_INTERVAL_S = 0.1
+RESEND_INTERVAL_S = 2.0
 
 
 @pytest.fixture()
@@ -75,16 +79,26 @@ def _global_env(prefix: str) -> list[str]:
 
 
 def _echo_in_pane(pane_id: str, variable: str) -> str:
-    """Run `echo MARK=[$VAR]` in the pane and return what it printed."""
-    tmux.run_tmux(["send-keys", "-t", pane_id, f"echo MARK=[${variable}]", "Enter"])
+    """Run `echo MARK=[$VAR]` in the pane and return what it printed.
+
+    The line is re-sent while we wait. Keys sent to a pane whose shell has not
+    started yet are dropped, and polling afterwards can never find something
+    that was never typed — which is why two seconds passed here and failed on a
+    cold CI runner. Echoing more than once is harmless; not echoing at all is
+    indistinguishable from the bug this file exists to catch.
+    """
     deadline = time.monotonic() + PANE_SETTLE_S
-    while time.monotonic() < deadline:
-        cap = tmux.run_tmux(["capture-pane", "-p", "-t", pane_id], check=False)
-        for line in (cap.stdout or "").splitlines():
-            if line.startswith("MARK=[") and line.endswith("]"):
-                return line[len("MARK=[") : -1]
-        time.sleep(POLL_INTERVAL_S)
-    raise AssertionError(f"pane {pane_id} never echoed {variable}")
+    while True:
+        tmux.run_tmux(["send-keys", "-t", pane_id, f"echo MARK=[${variable}]", "Enter"])
+        attempt_until = min(time.monotonic() + RESEND_INTERVAL_S, deadline)
+        while time.monotonic() < attempt_until:
+            cap = tmux.run_tmux(["capture-pane", "-p", "-t", pane_id], check=False)
+            for line in (cap.stdout or "").splitlines():
+                if line.startswith("MARK=[") and line.endswith("]"):
+                    return line[len("MARK=[") : -1]
+            time.sleep(POLL_INTERVAL_S)
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"pane {pane_id} never echoed {variable}")
 
 
 def _start_server_without_tmpdir() -> None:

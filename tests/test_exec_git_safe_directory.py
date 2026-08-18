@@ -12,7 +12,21 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from codeagent_mcp.exec.env import apply_git_safe_directory, merge_env_overrides
+
+
+@pytest.fixture(autouse=True)
+def _private_tmpdir(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+    """Give every test here its own temp root.
+
+    merge_env_overrides pins TMPDIR into the child environment and creates the
+    directory. Without an override that is the production path, which exists on
+    the deployment host and cannot be created anywhere else — so these tests
+    passed on one machine and failed on every other.
+    """
+    monkeypatch.setenv("TMPDIR", str(tmp_path_factory.mktemp("svc-tmp")))
 
 
 def _git(root: Path, *args: str) -> None:
