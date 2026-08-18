@@ -26,10 +26,10 @@ from codeagent_mcp.tools.workspace import set_lease_manager
 from codeagent_mcp.workspace.lease_store import LeaseStore
 from codeagent_mcp.workspace.leases import LeaseManager
 
-# Generous because a cold CI runner starts a shell far slower than this host,
-# and the cost of waiting is seconds while the cost of not waiting is a red
-# build that says nothing about the code.
-PANE_SETTLE_S = 20.0
+# The resend loop below was added on a wrong theory — the pane was echoing fine,
+# the reading was broken. It is kept because a shell that is not up yet drops
+# keys silently, but it is not what fixes this file.
+PANE_SETTLE_S = 10.0
 POLL_INTERVAL_S = 0.1
 RESEND_INTERVAL_S = 2.0
 
@@ -87,7 +87,7 @@ def _pane_diagnostics(pane_id: str) -> str:
     """
     parts: list[str] = []
     for label, args in (
-        ("capture", ["capture-pane", "-p", "-t", pane_id]),
+        ("capture", ["capture-pane", "-p", "-J", "-t", pane_id]),
         (
             "panes",
             [
@@ -121,7 +121,9 @@ def _echo_in_pane(pane_id: str, variable: str) -> str:
         tmux.run_tmux(["send-keys", "-t", pane_id, f"echo MARK=[${variable}]", "Enter"])
         attempt_until = min(time.monotonic() + RESEND_INTERVAL_S, deadline)
         while time.monotonic() < attempt_until:
-            cap = tmux.run_tmux(["capture-pane", "-p", "-t", pane_id], check=False)
+            # -J joins wrapped lines: a temp path longer than the pane width
+            # comes back split otherwise, and the match can never succeed.
+            cap = tmux.run_tmux(["capture-pane", "-p", "-J", "-t", pane_id], check=False)
             for line in (cap.stdout or "").splitlines():
                 if line.startswith("MARK=[") and line.endswith("]"):
                     return line[len("MARK=[") : -1]
