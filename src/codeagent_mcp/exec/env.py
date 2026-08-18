@@ -199,6 +199,25 @@ def apply_project_env(env: dict[str, str], project_env: dict[str, str]) -> dict[
     return out
 
 
+def apply_git_safe_directory(env: dict[str, str], root: str) -> dict[str, str]:
+    """Let git work on a checkout the service account does not own.
+
+    Registered roots routinely belong to another account (root, or the app's own
+    user) with the service reaching them through a group. Git calls that "dubious
+    ownership" and refuses the repository outright, so every git command run
+    through exec_run failed on a checkout that git_status read happily — those
+    tools pass the exception per invocation, and exec_run did not.
+
+    The exception is scoped to this one child process and names the project root
+    literally; it is never a wildcard and never a global git config.
+    """
+    out = dict(env)
+    out["GIT_CONFIG_COUNT"] = "1"
+    out["GIT_CONFIG_KEY_0"] = "safe.directory"
+    out["GIT_CONFIG_VALUE_0"] = root
+    return out
+
+
 def child_umask() -> int:
     """Umask for processes spawned on a client's behalf, such as build and test runs.
 

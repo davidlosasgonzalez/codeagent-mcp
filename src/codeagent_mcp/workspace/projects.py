@@ -34,6 +34,8 @@ class ProjectConfig:
     env: dict[str, str] = field(default_factory=dict)
     control_socket: str | None = None
     health_url: str | None = None
+    preview_url: str | None = None
+    run_as_user: str | None = None
     runtime_paths: dict[str, str] = field(default_factory=dict)
 
 
@@ -73,20 +75,48 @@ def _parse_control_socket(raw: Any, project: str) -> str | None:
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
-def _parse_health_url(raw: Any, project: str) -> str | None:
-    """Validate the optional health probe URL: http(s) on loopback only."""
+def _parse_loopback_url(raw: Any, project: str, field_name: str) -> str | None:
+    """Validate an optional URL the server itself will fetch: loopback only.
+
+    The server reaches these on the client's behalf and hands back what it
+    finds, so anything but loopback would turn the registry into a request
+    forwarder for whatever this host can see.
+    """
     if raw is None:
         return None
     url = str(raw).strip()
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"project {project!r}: 'health_url' must be an http or https URL")
+        raise ValueError(f"project {project!r}: {field_name!r} must be an http or https URL")
     if (parsed.hostname or "") not in _LOOPBACK_HOSTS:
         raise ValueError(
-            f"project {project!r}: 'health_url' must point at loopback "
+            f"project {project!r}: {field_name!r} must point at loopback "
             f"({', '.join(sorted(_LOOPBACK_HOSTS))}), not {parsed.hostname!r}"
         )
     return url
+
+
+_USER_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+
+
+def _parse_run_as_user(raw: Any, project: str) -> str | None:
+    """Validate the optional account exec_run may drop into for this project.
+
+    Declaring it grants the agent whatever that account can already do — which is
+    the point, and why root is refused outright. The privileged helper checks the
+    same thing again; neither side trusts the other to have done it.
+    """
+    if raw is None:
+        return None
+    name = str(raw).strip()
+    if not _USER_RE.match(name):
+        raise ValueError(f"project {project!r}: 'run_as_user' must be a plain account name")
+    if name == "root":
+        raise ValueError(
+            f"project {project!r}: 'run_as_user' may not be root — the point of "
+            "this field is to reach a service account without reaching root"
+        )
+    return name
 
 
 _RUNTIME_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -165,7 +195,9 @@ def _parse_entry(raw: dict[str, Any]) -> ProjectConfig:
         writable=writable,
         env=_parse_env(raw.get("env"), name),
         control_socket=_parse_control_socket(raw.get("control_socket"), name),
-        health_url=_parse_health_url(raw.get("health_url"), name),
+        health_url=_parse_loopback_url(raw.get("health_url"), name, "health_url"),
+        preview_url=_parse_loopback_url(raw.get("preview_url"), name, "preview_url"),
+        run_as_user=_parse_run_as_user(raw.get("run_as_user"), name),
         runtime_paths=_parse_runtime_paths(raw.get("runtime_paths"), name),
     )
 
