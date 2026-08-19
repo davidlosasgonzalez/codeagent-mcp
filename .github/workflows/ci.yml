@@ -11,6 +11,9 @@ env:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # A stuck step otherwise runs to the six-hour default. This job took
+    # three minutes on its last green run; apt hanging is not worth hours.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
