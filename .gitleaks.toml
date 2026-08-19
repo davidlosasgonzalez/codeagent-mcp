@@ -1,21 +1,32 @@
 # Secret-scan configuration.
 #
-# The default rules are kept in full; this only adds one exception.
+# Every default rule is kept, and the only exception names two commits by hash.
 #
-# tests/test_redaction.py exists to prove that credential-shaped values never
-# leave the server, so it has to contain credential-shaped values. A scanner
-# cannot tell a fixture from a leak, and three invented strings there failed the
-# scan for the whole repository.
+# tests/test_redaction.py proves that credential-shaped values never leave the
+# server, so it has to contain values with that shape. It first held them as
+# literals, and a scanner cannot tell a fixture from a leak: three findings, and
+# two incidents raised against the repository.
 #
-# The exception is scoped to that one path, and the file itself assembles its
-# token prefixes at run time — so a literal credential appearing there would be
-# an anomaly in review even though the scanner would now stay quiet about it.
-# That is the cost of this entry, and it is why it names one file rather than a
-# directory or a rule.
+# The file now synthesises every value at run time, so the current tree matches
+# no rule and needs no exception at all — verified with the default rules and
+# this config removed. What remains is the history, which cannot be edited
+# without rewriting published commits.
+#
+# So the exemption is by commit hash rather than by path. A path exemption would
+# have been permanent and would have covered a real mistake made in that file
+# tomorrow; two frozen hashes cover exactly the blobs already published and
+# nothing that can ever be written again.
+#
+# GitGuardian raises its own incidents against the same two commits. Nothing in
+# this repository clears those; they are resolved as false positives in that
+# dashboard.
 
 [extend]
 useDefault = true
 
 [[allowlists]]
-description = "Invented credentials used as fixtures by the redaction tests"
-paths = ['''^tests/test_redaction\.py$''']
+description = "Invented redaction fixtures, published before the file synthesised them"
+commits = [
+  "2fb9eb7b870baa764649540fdc9d4fbea4b060c7",
+  "cdc5254ae8c4911ff7afd1a484790a625f103a77",
+]
